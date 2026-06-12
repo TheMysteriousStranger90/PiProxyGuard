@@ -1,0 +1,10 @@
+bin/
+obj/
+publish/
+*.user
+*.db
+*.db-shm
+*.db-wal
+blocked_domains.acl
+.vs/
+.idea/

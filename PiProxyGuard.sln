@@ -1,0 +1,57 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{9CE1D4BE-20CC-460C-9774-CA8D89CC3A4C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PiProxyGuard.Domain", "src\PiProxyGuard.Domain\PiProxyGuard.Domain.csproj", "{07A2A911-D072-43B5-81D5-9A99CA0F783A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PiProxyGuard.Infrastructure", "src\PiProxyGuard.Infrastructure\PiProxyGuard.Infrastructure.csproj", "{AD4E95B0-BA87-4A76-A73D-E3F71208ABD6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PiProxyGuard.Worker", "src\PiProxyGuard.Worker\PiProxyGuard.Worker.csproj", "{A6E173BA-D1AF-4B41-B1CA-453378FEE9AA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PiProxyGuard.Api", "src\PiProxyGuard.Api\PiProxyGuard.Api.csproj", "{0CA3A90A-4A4E-4A81-89A9-3C5E820C0F98}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{80438B22-5439-44DB-83E7-9924E75517F0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PiProxyGuard.Tests", "tests\PiProxyGuard.Tests\PiProxyGuard.Tests.csproj", "{EDDBE797-17A3-4B1F-ABC9-A5A007A78114}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{07A2A911-D072-43B5-81D5-9A99CA0F783A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{07A2A911-D072-43B5-81D5-9A99CA0F783A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{07A2A911-D072-43B5-81D5-9A99CA0F783A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{07A2A911-D072-43B5-81D5-9A99CA0F783A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AD4E95B0-BA87-4A76-A73D-E3F71208ABD6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD4E95B0-BA87-4A76-A73D-E3F71208ABD6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD4E95B0-BA87-4A76-A73D-E3F71208ABD6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD4E95B0-BA87-4A76-A73D-E3F71208ABD6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A6E173BA-D1AF-4B41-B1CA-453378FEE9AA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A6E173BA-D1AF-4B41-B1CA-453378FEE9AA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A6E173BA-D1AF-4B41-B1CA-453378FEE9AA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A6E173BA-D1AF-4B41-B1CA-453378FEE9AA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0CA3A90A-4A4E-4A81-89A9-3C5E820C0F98}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0CA3A90A-4A4E-4A81-89A9-3C5E820C0F98}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0CA3A90A-4A4E-4A81-89A9-3C5E820C0F98}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0CA3A90A-4A4E-4A81-89A9-3C5E820C0F98}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EDDBE797-17A3-4B1F-ABC9-A5A007A78114}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EDDBE797-17A3-4B1F-ABC9-A5A007A78114}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EDDBE797-17A3-4B1F-ABC9-A5A007A78114}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EDDBE797-17A3-4B1F-ABC9-A5A007A78114}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{07A2A911-D072-43B5-81D5-9A99CA0F783A} = {9CE1D4BE-20CC-460C-9774-CA8D89CC3A4C}
+		{AD4E95B0-BA87-4A76-A73D-E3F71208ABD6} = {9CE1D4BE-20CC-460C-9774-CA8D89CC3A4C}
+		{A6E173BA-D1AF-4B41-B1CA-453378FEE9AA} = {9CE1D4BE-20CC-460C-9774-CA8D89CC3A4C}
+		{0CA3A90A-4A4E-4A81-89A9-3C5E820C0F98} = {9CE1D4BE-20CC-460C-9774-CA8D89CC3A4C}
+		{EDDBE797-17A3-4B1F-ABC9-A5A007A78114} = {80438B22-5439-44DB-83E7-9924E75517F0}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        run: dotnet test -c Release --no-build --verbosity normal
+
+      - name: Publish linux-arm64
+        run: |
+          dotnet publish src/PiProxyGuard.Worker -c Release -r linux-arm64 --self-contained true \
+            -p:PublishSingleFile=true -p:PublishTrimmed=false -o publish/linux-arm64/worker
+          dotnet publish src/PiProxyGuard.Api -c Release -r linux-arm64 --self-contained true \
+            -p:PublishSingleFile=true -p:PublishTrimmed=false -o publish/linux-arm64/api
+
+      - name: Package artifacts
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          cp -r deploy publish/linux-arm64/deploy
+          cp README.md publish/linux-arm64/README.md
+          cd publish
+          tar -czf "PiProxyGuard-${VERSION}-linux-arm64.tar.gz" -C linux-arm64 .
+          cd linux-arm64 && zip -rq "../PiProxyGuard-${VERSION}-linux-arm64.zip" .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: PiProxyGuard ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            publish/PiProxyGuard-${{ github.ref_name }}-linux-arm64.tar.gz
+            publish/PiProxyGuard-${{ github.ref_name }}-linux-arm64.zip

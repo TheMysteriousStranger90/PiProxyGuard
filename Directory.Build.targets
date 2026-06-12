@@ -1,0 +1,14 @@
+<Project>
+
+  <!-- Relax selected analyzer rules for test projects (warnings stay errors).
+       Lives in Directory.Build.targets because IsTestProject is set after
+       Directory.Build.props is imported. -->
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+    <!-- CA1707: test method names use underscores by convention -->
+    <!-- CA1062: xUnit theories receive non-null arguments -->
+    <!-- CA2007: ConfigureAwait is irrelevant in test hosts -->
+    <!-- CA1816: xUnit test classes use plain IDisposable cleanup -->
+    <NoWarn>$(NoWarn);CA1707;CA1062;CA2007;CA1816</NoWarn>
+  </PropertyGroup>
+
+</Project>

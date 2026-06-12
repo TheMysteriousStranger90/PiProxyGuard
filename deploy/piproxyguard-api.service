@@ -1,0 +1,17 @@
+[Unit]
+Description=PiProxyGuard Web API (traffic statistics)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+WorkingDirectory=/opt/piproxyguard/api
+ExecStart=/opt/piproxyguard/api/PiProxyGuard.Api
+Restart=on-failure
+RestartSec=10
+User=piproxyguard
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_gcServer=0
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,4 @@
+1781190000.123    245 192.168.1.10 TCP_MISS/200 51234 GET http://example.com/page.html - HIER_DIRECT/93.184.216.34 text/html
+1781190001.456   1200 192.168.1.20 TCP_TUNNEL/200 998877 CONNECT www.youtube.com:443 - HIER_DIRECT/142.250.74.78 -
+1781190002.789      0 192.168.1.30 TCP_DENIED/403 3821 GET http://ads.tracker.example/banner.js - HIER_NONE/- text/html
+1781190003.900    150 192.168.1.10 TCP_HIT/200 20480 GET http://dev.to/articles - HIER_NONE/- text/html

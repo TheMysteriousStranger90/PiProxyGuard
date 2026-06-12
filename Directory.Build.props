@@ -1,0 +1,20 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!-- CA1303: Do not pass literals as localized parameters - no localization -->
+    <!-- CA1848: Use LoggerMessage delegates - plain ILogger calls are fine at this scale -->
+    <!-- CA1002: Do not expose generic lists - options/DTOs intentionally use List<T> -->
+    <NoWarn>$(NoWarn);CA1303;CA1848;CA1873;CA1002;NU1507</NoWarn>
+  </PropertyGroup>
+
+</Project>
