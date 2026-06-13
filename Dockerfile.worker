@@ -26,7 +26,7 @@ WORKDIR /app
 ENV DOTNET_NOLOGO=1
 COPY --from=build /app ./
 
-ARG VERSION=1.2.0
+ARG VERSION=1.3.0
 LABEL org.opencontainers.image.title="PiProxyGuard Worker" \
       org.opencontainers.image.description="Log ingestion + blocklist updater + suspicious-activity detector (.NET 9)." \
       org.opencontainers.image.version="${VERSION}" \
