@@ -23,4 +23,11 @@ public interface IBlockedDomainRepository : IRepository<BlockedDomain>
 
     /// <summary>Domains owned by manual/auto entries — they take precedence over feeds.</summary>
     Task<IReadOnlyList<string>> GetNonFeedDomainNamesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Auto-blocks (<see cref="BlockSource.Auto"/>) whose <see cref="BlockedDomain.ExpiresAtUtc"/>
+    /// is on or before <paramref name="nowUtc"/> — the temporary blocks that should be released.
+    /// </summary>
+    Task<IReadOnlyList<BlockedDomain>> GetExpiredAutoBlocksAsync(
+        DateTime nowUtc, CancellationToken cancellationToken = default);
 }

@@ -12,5 +12,17 @@ public enum AlertType
     RepeatedDeniedRequests = 2,
 
     /// <summary>Client contacted a domain present in the blocklist.</summary>
-    BlockedDomainContact = 3
+    BlockedDomainContact = 3,
+
+    /// <summary>
+    /// Client's request rate in the window is far above its own recent baseline
+    /// (a sudden spike rather than a steady high rate).
+    /// </summary>
+    TrafficSpike = 4,
+
+    /// <summary>
+    /// Client contacted a domain whose name looks machine-generated
+    /// (high-entropy / DGA-style), a common malware command-and-control signal.
+    /// </summary>
+    SuspiciousDomain = 5
 }

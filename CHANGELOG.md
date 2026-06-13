@@ -1,5 +1,73 @@
 # Changelog
 
+## 1.2.0 — Protect & Reliability
+
+A protection- and reliability-focused release. The detector gets smarter, the
+ACL writer gets safer, and a set of new endpoints make the box easier to
+operate, back up and monitor.
+
+### Protection
+- **Allowlist** — domains that must never be blocked. The allowlist always
+  overrides the blocklist and feeds, and rewrites the Squid ACL on every change.
+  `GET/POST/DELETE /api/allowlist`.
+- **Auto-block with TTL** — suspicious hosts (and manual blocks) can carry an
+  expiry; the updater sweeps and releases expired auto-blocks every cycle so
+  temporary blocks self-heal. `expiresInHours` on `POST /api/blocklist`.
+- **Per-client profiles** — tighten or loosen detection thresholds per device or
+  subnet (exact IP or CIDR), by explicit override or a strictness multiplier.
+- **Traffic-spike detection** — flags a client whose request rate jumps well
+  above its own recent baseline (configurable multiplier / minimum).
+- **DGA / suspicious-domain detection** — Shannon-entropy analysis of the
+  significant domain label flags algorithmically-generated hostnames, with
+  optional auto-blocking.
+- **Notifications** — Telegram and SMTP e-mail channels behind a dispatcher;
+  new alerts are pushed to every configured channel (respecting a minimum
+  severity). Each channel self-disables until configured.
+- **Threat-intel lookup** — pluggable interface with a free URLhaus client
+  (VirusTotal / AbuseIPDB reserved behind the same interface).
+  `GET /api/threat-intel/check?domain=`.
+
+### Reliability
+- **ACL backup + rollback** — the previous ACL is backed up before every
+  rewrite; if `squid -k reconfigure` fails the file is restored automatically,
+  so a malformed blocklist can never take the proxy down.
+- **Self-diagnostics** — database, log-ingestion freshness, blocklist and ACL
+  checks. `GET /api/diagnostics` (503 when unhealthy) and a `/health/ready`
+  readiness probe.
+
+### Operability
+- **Backup / restore** — export manual + auto blocklist entries and the full
+  allowlist as portable JSON, and re-import them. `GET /api/backup/export`,
+  `POST /api/backup/import`.
+- **Digest reports** — a human-readable traffic-and-security summary for a
+  period. `GET /api/reports/digest?period=day|week|month`.
+- **Domain categorization** — offline rule-based classification (ads, tracking,
+  social, streaming, CDN, malware). `GET /api/stats/categories`.
+- **Prometheus metrics** — per-request HTTP metrics at `GET /metrics`
+  (excluded from API-key auth so it is scrapeable).
+- **Docker** — `Dockerfile.api`, `Dockerfile.worker` and a `docker-compose.yml`
+  that brings up Squid + Worker + API with shared volumes.
+
+### New API endpoints
+- `GET/POST/DELETE /api/allowlist`
+- `GET /api/stats/categories`
+- `GET /api/diagnostics`, `GET /health/ready`
+- `GET /api/reports/digest`
+- `GET /api/backup/export`, `POST /api/backup/import`
+- `GET /api/threat-intel/check`
+- `GET /metrics` (Prometheus)
+- `POST /api/blocklist` now accepts `expiresInHours`
+
+### Data
+- Migration `AddAllowlistAndAutoBlockTtl`: new `AllowedDomains` table and a
+  nullable `ExpiresAtUtc` column on `BlockedDomains` (plus supporting indexes).
+  Applied automatically on startup.
+
+### Tests
+- 64 tests pass (was 40). New coverage: DGA entropy, domain categorizer,
+  client-profile resolver, notification dispatcher fan-out, ACL backup/rollback,
+  allowlist repository, auto-block expiry sweep and DGA auto-blocking.
+
 ## 1.1.0
 
 Refactor to the **Repository** and **Unit of Work** patterns, and full use of the

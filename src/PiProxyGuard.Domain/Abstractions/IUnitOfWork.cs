@@ -16,6 +16,9 @@ public interface IUnitOfWork
     /// <summary>The aggregated blocklist.</summary>
     IBlockedDomainRepository BlockedDomains { get; }
 
+    /// <summary>The allowlist (exceptions that override the blocklist).</summary>
+    IAllowedDomainRepository AllowedDomains { get; }
+
     /// <summary>Suspicious-activity alerts.</summary>
     IAlertRepository Alerts { get; }
 

@@ -41,7 +41,7 @@ public class BlocklistController : ControllerBase
 
         return domains
             .Select(d => new BlockedDomainDto(
-                d.Id, d.Domain, d.Source.ToString(), d.Reason, d.CreatedAtUtc, d.IsActive))
+                d.Id, d.Domain, d.Source.ToString(), d.Reason, d.CreatedAtUtc, d.IsActive, d.ExpiresAtUtc))
             .ToList();
     }
 
@@ -68,7 +68,8 @@ public class BlocklistController : ControllerBase
             Source = BlockSource.Manual,
             Reason = request.Reason,
             CreatedAtUtc = DateTime.UtcNow,
-            IsActive = true
+            IsActive = true,
+            ExpiresAtUtc = request.ExpiresInHours is > 0 ? DateTime.UtcNow.AddHours(request.ExpiresInHours.Value) : null
         };
 
         _unitOfWork.BlockedDomains.Add(entity);
@@ -76,7 +77,7 @@ public class BlocklistController : ControllerBase
         await _updater.UpdateAsync(cancellationToken);
 
         var dto = new BlockedDomainDto(
-            entity.Id, entity.Domain, entity.Source.ToString(), entity.Reason, entity.CreatedAtUtc, entity.IsActive);
+            entity.Id, entity.Domain, entity.Source.ToString(), entity.Reason, entity.CreatedAtUtc, entity.IsActive, entity.ExpiresAtUtc);
         return CreatedAtAction(nameof(GetBlockedDomains), new { search = entity.Domain }, dto);
     }
 

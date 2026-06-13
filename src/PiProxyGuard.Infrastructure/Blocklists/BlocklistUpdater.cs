@@ -43,15 +43,21 @@ public class BlocklistUpdater
         var feedDomains = await DownloadFeedsAsync(cancellationToken);
         await SyncFeedDomainsAsync(feedDomains, cancellationToken);
 
+        await SweepExpiredAutoBlocksAsync(cancellationToken);
+
         var activeDomains = await _unitOfWork.BlockedDomains.GetActiveDomainNamesAsync(cancellationToken);
 
-        var aclRewritten = await _aclWriter.WriteIfChangedAsync(activeDomains, cancellationToken);
+        // The allowlist always wins: never emit an allowlisted domain to the ACL.
+        var allowlist = await _unitOfWork.AllowedDomains.GetAllDomainNamesAsync(cancellationToken);
+        var effectiveDomains = FilterAllowlisted(activeDomains, allowlist);
+
+        var aclRewritten = await _aclWriter.WriteIfChangedAsync(effectiveDomains, cancellationToken);
 
         _logger.LogInformation(
-            "Blocklist update finished: {Total} active domains ({FromFeeds} from feeds), ACL rewritten: {Rewritten}",
-            activeDomains.Count, feedDomains.Count, aclRewritten);
+            "Blocklist update finished: {Total} active domains ({FromFeeds} from feeds, {Allowed} allowlisted), ACL rewritten: {Rewritten}",
+            effectiveDomains.Count, feedDomains.Count, activeDomains.Count - effectiveDomains.Count, aclRewritten);
 
-        return new BlocklistUpdateResult(activeDomains.Count, feedDomains.Count, aclRewritten);
+        return new BlocklistUpdateResult(effectiveDomains.Count, feedDomains.Count, aclRewritten);
     }
 
     private async Task<HashSet<string>> DownloadFeedsAsync(CancellationToken cancellationToken)
@@ -131,5 +137,52 @@ public class BlocklistUpdater
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SweepExpiredAutoBlocksAsync(CancellationToken cancellationToken)
+    {
+        var expired = await _unitOfWork.BlockedDomains.GetExpiredAutoBlocksAsync(DateTime.UtcNow, cancellationToken);
+        if (expired.Count == 0)
+        {
+            return;
+        }
+
+        _unitOfWork.BlockedDomains.RemoveRange(expired);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Released {Count} expired auto-block(s)", expired.Count);
+    }
+
+    private static IReadOnlyList<string> FilterAllowlisted(
+        IReadOnlyList<string> domains, IReadOnlyList<string> allowlist)
+    {
+        if (allowlist.Count == 0)
+        {
+            return domains;
+        }
+
+        var allowSet = allowlist.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return domains.Where(d => !IsAllowlisted(d, allowSet)).ToList();
+    }
+
+    private static bool IsAllowlisted(string domain, HashSet<string> allowlist)
+    {
+        var current = domain;
+        while (!string.IsNullOrEmpty(current))
+        {
+            if (allowlist.Contains(current))
+            {
+                return true;
+            }
+
+            var dot = current.IndexOf('.', StringComparison.Ordinal);
+            if (dot < 0)
+            {
+                break;
+            }
+
+            current = current[(dot + 1)..];
+        }
+
+        return false;
     }
 }

@@ -43,6 +43,34 @@ public class BlocklistOptions
 
     /// <summary>Command executed after the ACL file changes (empty = skip).</summary>
     public string ReloadCommand { get; set; } = "squid -k reconfigure";
+
+    /// <summary>
+    /// Keep a ".bak" copy of the ACL before each rewrite and restore it if the
+    /// reload command fails, so a bad blocklist can never wedge the proxy.
+    /// </summary>
+    public bool BackupAclBeforeWrite { get; set; } = true;
+}
+
+/// <summary>Per-client threshold overrides keyed by IP or CIDR prefix.</summary>
+public class ClientProfileOptions
+{
+    /// <summary>Exact client IP or a CIDR like "192.168.10.0/24".</summary>
+    public string Match { get; set; } = string.Empty;
+
+    /// <summary>Optional friendly name for logs/alerts (e.g. "kids-tablet").</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Multiplier applied to every default threshold (less than 1 = stricter).</summary>
+    public double Strictness { get; set; } = 1.0;
+
+    /// <summary>Override for requests-per-window (null = use default × strictness).</summary>
+    public int? MaxRequestsPerWindow { get; set; }
+
+    /// <summary>Override for bytes-per-window (null = use default × strictness).</summary>
+    public long? MaxBytesPerWindow { get; set; }
+
+    /// <summary>Override for denied-requests-per-window (null = use default × strictness).</summary>
+    public int? MaxDeniedPerWindow { get; set; }
 }
 
 public class DetectionOptions
@@ -66,6 +94,40 @@ public class DetectionOptions
 
     /// <summary>When true, hosts contacted via denied requests are added to the blocklist automatically.</summary>
     public bool AutoBlockSuspiciousHosts { get; set; }
+
+    /// <summary>
+    /// Lifetime of an automatic block. After it elapses the auto-block sweep
+    /// removes the entry. 0 = permanent auto-blocks.
+    /// </summary>
+    public int AutoBlockTtlHours { get; set; } = 24;
+
+    /// <summary>Enable the traffic-spike detector (compares the window to a baseline).</summary>
+    public bool DetectTrafficSpikes { get; set; } = true;
+
+    /// <summary>
+    /// How many multiples of the baseline window length to use as the baseline
+    /// average. A spike fires when the current window exceeds the baseline rate
+    /// by <see cref="SpikeMultiplier"/>×.
+    /// </summary>
+    public int SpikeBaselineWindows { get; set; } = 12;
+
+    /// <summary>Factor over baseline that counts as a spike.</summary>
+    public double SpikeMultiplier { get; set; } = 5.0;
+
+    /// <summary>Minimum requests in the window before a spike can fire (ignore noise).</summary>
+    public int SpikeMinRequests { get; set; } = 100;
+
+    /// <summary>Enable the DGA / suspicious-domain detector.</summary>
+    public bool DetectSuspiciousDomains { get; set; } = true;
+
+    /// <summary>Shannon-entropy threshold (bits/char) above which a label looks machine-generated.</summary>
+    public double DomainEntropyThreshold { get; set; } = 3.8;
+
+    /// <summary>Minimum significant-label length considered for entropy scoring.</summary>
+    public int DomainMinLabelLength { get; set; } = 12;
+
+    /// <summary>Per-client threshold overrides (kids' devices, servers, ...).</summary>
+    public List<ClientProfileOptions> ClientProfiles { get; set; } = [];
 }
 
 public class ApiOptions
@@ -74,4 +136,82 @@ public class ApiOptions
 
     /// <summary>Optional API key. When set, requests must send it in the X-Api-Key header.</summary>
     public string? ApiKey { get; set; }
+}
+
+/// <summary>Telegram bot delivery settings.</summary>
+public class TelegramNotificationOptions
+{
+    public string? BotToken { get; set; }
+
+    public string? ChatId { get; set; }
+
+    public bool Enabled => !string.IsNullOrWhiteSpace(BotToken) && !string.IsNullOrWhiteSpace(ChatId);
+}
+
+/// <summary>SMTP e-mail delivery settings.</summary>
+public class EmailNotificationOptions
+{
+    public string? Host { get; set; }
+
+    public int Port { get; set; } = 587;
+
+    public bool UseSsl { get; set; } = true;
+
+    public string? Username { get; set; }
+
+    public string? Password { get; set; }
+
+    public string? From { get; set; }
+
+    public string? To { get; set; }
+
+    public bool Enabled =>
+        !string.IsNullOrWhiteSpace(Host) &&
+        !string.IsNullOrWhiteSpace(From) &&
+        !string.IsNullOrWhiteSpace(To);
+}
+
+public class NotificationOptions
+{
+    public const string SectionName = "Notifications";
+
+    /// <summary>Lowest severity that is actually delivered.</summary>
+    public NotificationLevel MinimumSeverity { get; set; } = NotificationLevel.Warning;
+
+    public TelegramNotificationOptions Telegram { get; set; } = new();
+
+    public EmailNotificationOptions Email { get; set; } = new();
+}
+
+/// <summary>Mirror of <c>NotificationSeverity</c> for configuration binding.</summary>
+public enum NotificationLevel
+{
+    Info = 0,
+    Warning = 1,
+    Critical = 2
+}
+
+public class GeoIpOptions
+{
+    public const string SectionName = "GeoIp";
+
+    /// <summary>Path to a MaxMind GeoLite2-Country .mmdb file (empty = disabled).</summary>
+    public string? CountryDatabasePath { get; set; }
+
+    /// <summary>Path to a MaxMind GeoLite2-ASN .mmdb file (empty = disabled).</summary>
+    public string? AsnDatabasePath { get; set; }
+}
+
+public class ThreatIntelOptions
+{
+    public const string SectionName = "ThreatIntel";
+
+    /// <summary>Enable the free URLhaus host lookup.</summary>
+    public bool UrlhausEnabled { get; set; } = true;
+
+    /// <summary>Optional VirusTotal API key (reserved for a future provider).</summary>
+    public string? VirusTotalApiKey { get; set; }
+
+    /// <summary>Optional AbuseIPDB API key (reserved for a future provider).</summary>
+    public string? AbuseIpDbApiKey { get; set; }
 }
