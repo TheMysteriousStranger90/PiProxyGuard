@@ -5,7 +5,7 @@ namespace PiProxyGuard.Api.Middleware;
 
 /// <summary>
 /// Optional API-key protection. When Api:ApiKey is set in configuration,
-/// every request (except /health and Swagger) must send the same value
+/// every request to /api/* must send the same value
 /// in the X-Api-Key header. Leave the key empty on a trusted LAN.
 /// </summary>
 public class ApiKeyMiddleware
@@ -23,7 +23,7 @@ public class ApiKeyMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (string.IsNullOrEmpty(_apiKey) || IsPublicPath(context.Request.Path))
+        if (string.IsNullOrEmpty(_apiKey) || !IsProtectedPath(context.Request.Path))
         {
             await _next(context);
             return;
@@ -39,6 +39,8 @@ public class ApiKeyMiddleware
         await _next(context);
     }
 
-    private static bool IsPublicPath(PathString path) =>
-        path.StartsWithSegments("/health") || path.StartsWithSegments("/swagger") || path.StartsWithSegments("/metrics");
+    // Only the REST API under /api is key-protected. The Blazor dashboard, its
+    // SignalR hub and static assets, plus /health, /swagger and /metrics, stay open.
+    private static bool IsProtectedPath(PathString path) =>
+        path.StartsWithSegments("/api");
 }

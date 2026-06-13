@@ -1,0 +1,20 @@
+<div class="range-picker">
+    @foreach (var option in Options)
+    {
+        <button type="button"
+                class="range-btn @(option.Hours == Hours ? "active" : null)"
+                @onclick="() => OnChange.InvokeAsync(option.Hours)">
+            @option.Label
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter] public int Hours { get; set; }
+    [Parameter] public EventCallback<int> OnChange { get; set; }
+
+    private static readonly (int Hours, string Label)[] Options =
+    [
+        (1, "1h"), (24, "24h"), (168, "7d"), (720, "30d")
+    ];
+}

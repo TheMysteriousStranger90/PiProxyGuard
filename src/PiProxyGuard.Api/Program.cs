@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using PiProxyGuard.Api.Middleware;
 using PiProxyGuard.Infrastructure;
+using PiProxyGuard.Web;
 using PiProxyGuard.Infrastructure.Diagnostics;
 using PiProxyGuard.Infrastructure.Persistence;
 
@@ -13,6 +14,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSystemd();
+
+// Blazor Server dashboard (hosted from the separate PiProxyGuard.Web library).
+builder.Services.AddPiProxyGuardWeb();
 
 var app = builder.Build();
 
@@ -26,12 +30,20 @@ using (var scope = app.Services.CreateScope())
 app.UseSwagger();
 app.UseSwaggerUI();
 
+app.UseStaticFiles();
+
+// Optional API-key protection — guards the REST API only (the dashboard and its
+// SignalR hub stay open on the trusted LAN, matching the existing trust model).
 app.UseMiddleware<ApiKeyMiddleware>();
 
 // Prometheus: per-request HTTP metrics plus the /metrics scrape endpoint.
 app.UseHttpMetrics();
 
+app.UseAntiforgery();
+
 app.MapControllers();
+app.MapPiProxyGuardWeb();
+
 app.MapGet("/health", () => Results.Ok(new { status = "ok", timeUtc = DateTime.UtcNow }));
 app.MapGet("/health/ready", async (SystemDiagnostics diagnostics, CancellationToken ct) =>
 {

@@ -1,0 +1,52 @@
+@page "/diagnostics"
+@inherits LivePageComponent
+
+<PageTitle>Diagnostics · PiProxyGuard</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Diagnostics</h1>
+        <p class="muted">Self-checks: database, log ingestion, ACL file and blocklist.</p>
+    </div>
+    @if (_report is not null)
+    {
+        <HealthBadge Status="_report.Status" />
+    }
+</div>
+
+<section class="panel">
+    @if (_report is null)
+    {
+        <p class="muted pad">Loading…</p>
+    }
+    else
+    {
+        <ul class="check-list big">
+            @foreach (var check in _report.Checks)
+            {
+                <li>
+                    <span class="dot @StatusClass(check.Status)"></span>
+                    <div>
+                        <strong>@check.Name</strong>
+                        <div class="muted">@check.Detail</div>
+                    </div>
+                    <span class="badge @StatusClass(check.Status)">@check.Status</span>
+                </li>
+            }
+        </ul>
+        <p class="muted pad small">Generated @Format.Timestamp(_report.GeneratedAtUtc) · readiness probe returns 503 when any check is in Error.</p>
+    }
+</section>
+
+@code {
+    private DiagnosticsReport? _report;
+
+    protected override async Task LoadAsync() => _report = await Dashboard.GetDiagnosticsAsync();
+
+    private static string StatusClass(DiagnosticStatus status) => status switch
+    {
+        DiagnosticStatus.Ok => "ok",
+        DiagnosticStatus.Warning => "warn",
+        _ => "err"
+    };
+}

@@ -1,0 +1,80 @@
+@page "/alerts"
+@inherits LivePageComponent
+
+<PageTitle>Alerts · PiProxyGuard</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Alerts</h1>
+        <p class="muted"><span class="live-dot"></span> Suspicious-activity alerts, newest first.</p>
+    </div>
+    <div class="filters">
+        <button type="button" class="chip @(_onlyOpen ? "active" : null)" @onclick="() => SetFilterAsync(true)">Open</button>
+        <button type="button" class="chip @(_onlyOpen ? null : "active")" @onclick="() => SetFilterAsync(false)">All</button>
+    </div>
+</div>
+
+<section class="panel">
+    @if (_alerts.Count == 0)
+    {
+        <p class="muted pad">@(_onlyOpen ? "No open alerts. 🎉" : "No alerts recorded.")</p>
+    }
+    else
+    {
+        <table class="data-table">
+            <thead>
+                <tr><th>Type</th><th>Client</th><th>Description</th><th>Detected</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var alert in _alerts)
+                {
+                    <tr class="@(alert.IsAcknowledged ? "inactive" : null)">
+                        <td><span class="badge alert-@alert.Type.ToLowerInvariant()">@alert.Type</span></td>
+                        <td>@alert.ClientIp</td>
+                        <td class="muted">@alert.Description</td>
+                        <td class="muted" title="@Format.Timestamp(alert.DetectedAtUtc)">@Format.Ago(alert.DetectedAtUtc)</td>
+                        <td class="num">
+                            @if (alert.IsAcknowledged)
+                            {
+                                <span class="muted small">ack'd</span>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn ghost" @onclick="() => AcknowledgeAsync(alert.Id)" disabled="@_busy">Acknowledge</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    private List<AlertDto> _alerts = [];
+    private bool _onlyOpen = true;
+    private bool _busy;
+
+    protected override async Task LoadAsync() =>
+        _alerts = await Dashboard.GetAlertsAsync(_onlyOpen, 100);
+
+    private async Task SetFilterAsync(bool onlyOpen)
+    {
+        _onlyOpen = onlyOpen;
+        await ReloadAsync();
+    }
+
+    private async Task AcknowledgeAsync(long id)
+    {
+        _busy = true;
+        try
+        {
+            await Dashboard.AcknowledgeAlertAsync(id);
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,0 +1,157 @@
+@page "/blocklist"
+@inherits LivePageComponent
+
+<PageTitle>Blocklist · PiProxyGuard</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Blocklist</h1>
+        <p class="muted">Domains blocked by the proxy. The allowlist always wins.</p>
+    </div>
+    <button type="button" class="btn" @onclick="RefreshFeedsAsync" disabled="@_busy">↻ Refresh feeds</button>
+</div>
+
+<section class="panel">
+    <div class="panel-head"><h2>Block a domain</h2></div>
+    <div class="form-row pad">
+        <input class="input grow" placeholder="example.com" @bind="_newDomain" @bind:event="oninput" />
+        <input class="input grow" placeholder="Reason (optional)" @bind="_newReason" @bind:event="oninput" />
+        <input class="input narrow" type="number" min="0" placeholder="TTL h" @bind="_newTtl" />
+        <button type="button" class="btn primary" @onclick="AddAsync" disabled="@_busy">Block</button>
+    </div>
+    @if (_error is not null)
+    {
+        <p class="form-error pad">@_error</p>
+    }
+    @if (_info is not null)
+    {
+        <p class="form-info pad">@_info</p>
+    }
+</section>
+
+<section class="panel">
+    <div class="panel-head">
+        <h2>Blocked domains</h2>
+        <div class="filters">
+            @foreach (var source in Sources)
+            {
+                <button type="button" class="chip @(source == _sourceFilter ? "active" : null)"
+                        @onclick="() => SetSourceAsync(source)">@(source ?? "All")</button>
+            }
+            <input class="input search" placeholder="Search…" @bind="_search" @bind:event="oninput" @bind:after="ReloadAsync" />
+        </div>
+    </div>
+
+    @if (_items.Count == 0)
+    {
+        <p class="muted pad">No matching entries.</p>
+    }
+    else
+    {
+        <table class="data-table">
+            <thead>
+                <tr><th>Domain</th><th>Source</th><th>Reason</th><th>Expires</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var item in _items)
+                {
+                    <tr class="@(item.IsActive ? null : "inactive")">
+                        <td class="ellipsis">@item.Domain</td>
+                        <td><span class="badge src-@item.Source.ToLowerInvariant()">@item.Source</span></td>
+                        <td class="ellipsis muted">@(string.IsNullOrEmpty(item.Reason) ? "—" : item.Reason)</td>
+                        <td class="muted">@(item.ExpiresAtUtc is { } exp ? Format.Ago(exp).Replace("ago", "left") : "never")</td>
+                        <td class="num">
+                            <button type="button" class="btn ghost danger" @onclick="() => RemoveAsync(item.Id)" disabled="@_busy">Remove</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <p class="muted pad small">Showing @_items.Count entries (max 200). Feed entries reappear on the next update.</p>
+    }
+</section>
+
+@code {
+    private static readonly string?[] Sources = [null, "Manual", "Feed", "Auto"];
+
+    private List<BlockedDomainDto> _items = [];
+    private string? _sourceFilter;
+    private string _search = string.Empty;
+    private string _newDomain = string.Empty;
+    private string _newReason = string.Empty;
+    private int? _newTtl;
+    private string? _error;
+    private string? _info;
+    private bool _busy;
+
+    protected override async Task LoadAsync() =>
+        _items = await Dashboard.GetBlockedAsync(_sourceFilter, NullIfEmpty(_search), 200);
+
+    private async Task SetSourceAsync(string? source)
+    {
+        _sourceFilter = source;
+        await ReloadAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        _error = _info = null;
+        if (string.IsNullOrWhiteSpace(_newDomain))
+        {
+            _error = "Enter a domain.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Dashboard.AddBlockedAsync(_newDomain, NullIfEmpty(_newReason), _newTtl);
+            if (!result.Success)
+            {
+                _error = result.Error;
+                return;
+            }
+
+            _info = $"Blocked {_newDomain.Trim().ToLowerInvariant()}.";
+            _newDomain = _newReason = string.Empty;
+            _newTtl = null;
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveAsync(long id)
+    {
+        _busy = true;
+        try
+        {
+            await Dashboard.RemoveBlockedAsync(id);
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RefreshFeedsAsync()
+    {
+        _error = _info = null;
+        _busy = true;
+        try
+        {
+            var result = await Dashboard.RefreshFeedsAsync();
+            _info = $"Feeds refreshed — {Format.Number(result.TotalActiveDomains)} active domains ({Format.Number(result.FeedDomains)} from feeds).";
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}
