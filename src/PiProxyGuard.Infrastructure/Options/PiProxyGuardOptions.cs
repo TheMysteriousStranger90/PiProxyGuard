@@ -136,6 +136,19 @@ public class ApiOptions
 
     /// <summary>Optional API key. When set, requests must send it in the X-Api-Key header.</summary>
     public string? ApiKey { get; set; }
+
+    /// <summary>
+    /// When greater than 0, applies a fixed-window rate limiter to /api/* of this
+    /// many requests per client IP per minute; requests over the limit get 429.
+    /// 0 (default) disables rate limiting.
+    /// </summary>
+    public int RateLimitPerMinute { get; set; }
+
+    /// <summary>
+    /// When true, enables HSTS and redirects HTTP to HTTPS. Requires an HTTPS
+    /// Kestrel endpoint/certificate to be configured. Off by default.
+    /// </summary>
+    public bool UseHttpsRedirection { get; set; }
 }
 
 /// <summary>Telegram bot delivery settings.</summary>

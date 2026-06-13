@@ -24,6 +24,13 @@
 *.sh     text eol=lf
 *.bash   text eol=lf
 
+# Debian package maintainer scripts (no extension) - MUST be LF or dpkg breaks on the Pi
+deploy/debian/postinst text eol=lf
+deploy/debian/prerm    text eol=lf
+deploy/debian/postrm   text eol=lf
+deploy/debian/preinst  text eol=lf
+deploy/debian/config   text eol=lf
+
 # Binary files
 *.png    binary
 *.jpg    binary

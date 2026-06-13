@@ -76,7 +76,11 @@ All persistence goes through the **Repository** and **Unit of Work** patterns in
 
 Swagger UI: `http://<pi>:5080/swagger`.
 
-Set `Api:ApiKey` in `appsettings.json` to require an `X-Api-Key` header on every request — recommended if you expose the API outside your LAN (better: keep it behind WireGuard).
+Hardening for `/api` (all optional, off by default — the dashboard stays open on a trusted LAN):
+
+- `Api:ApiKey` — require an `X-Api-Key` header on every `/api` request. Recommended if you expose the API outside your LAN (better still: keep it behind WireGuard).
+- `Api:RateLimitPerMinute` — when greater than 0, a fixed-window rate limiter caps each client IP to that many `/api` requests per minute; requests over the limit get `429 Too Many Requests`. The dashboard, SignalR hub, `/health`, `/metrics` and `/swagger` are never limited.
+- `Api:UseHttpsRedirection` — enable HSTS and redirect HTTP → HTTPS. Requires an HTTPS Kestrel endpoint/certificate to be configured (otherwise it logs a warning and does nothing).
 
 ## Configuration highlights (`appsettings.json`)
 
@@ -96,6 +100,11 @@ Set `Api:ApiKey` in `appsettings.json` to require an `X-Api-Key` header on every
 "Detection": {
   "IntervalMinutes": 5, "WindowMinutes": 5,
   "MaxRequestsPerWindow": 600, "MaxBytesPerWindow": 524288000, "MaxDeniedPerWindow": 20
+},
+"Api": {
+  "ApiKey": "",                 // empty = open on the LAN; set to require X-Api-Key
+  "RateLimitPerMinute": 0,      // > 0 enables a fixed-window 429 limiter on /api
+  "UseHttpsRedirection": false  // true = HSTS + HTTP->HTTPS (needs an HTTPS endpoint)
 }
 ```
 
@@ -122,6 +131,31 @@ convention, e.g. `Detection__AutoBlockSuspiciousHosts=true`,
 `Notifications__Telegram__BotToken=...`, `Api__ApiKey=...`.
 
 ## Deploying to the Raspberry Pi
+
+### Install via .deb package (recommended — fully automatic)
+
+Download the `piproxyguard_X.Y.Z_arm64.deb` asset from the [Releases](../../releases) page onto the Pi and install it with apt:
+
+```bash
+sudo apt install ./piproxyguard_*_arm64.deb
+```
+
+apt pulls in Squid automatically, and the package's post-install script writes the Squid config, creates the `piproxyguard` service user, installs the systemd units and starts the API + Worker for you. Nothing else to run. Open `http://<pi>:5080/` and point your devices at `<pi>:3128`. Remove with `sudo apt remove piproxyguard` (purge with `sudo apt purge piproxyguard`).
+
+### Quick install from the tarball (script)
+
+Grab the `PiProxyGuard-vX.Y.Z-linux-arm64.tar.gz` asset from the [Releases](../../releases) page **onto the Pi**, then run the bundled installer:
+
+```bash
+tar -xzf PiProxyGuard-*-linux-arm64.tar.gz
+sudo bash deploy/install.sh
+```
+
+That single command installs Squid, writes a working `squid.conf`, creates the `piproxyguard` service user + data dir, copies the binaries to `/opt/piproxyguard`, wires up the sudoers rule so the Worker can reload Squid, installs the systemd units and starts everything. No .NET runtime is needed (the binaries are self-contained). When it finishes it prints the dashboard URL.
+
+Open `http://<pi>:5080/` and point your devices' HTTP/HTTPS proxy at `<pi>:3128`. Remove everything again with `sudo bash deploy/uninstall.sh`.
+
+### Manual install (or building from source)
 
 1. **Install Squid** on the Pi and merge `deploy/squid.conf.sample` into `/etc/squid/squid.conf` (it adds the `dstdomain` ACL pointing at the generated blocklist).
 

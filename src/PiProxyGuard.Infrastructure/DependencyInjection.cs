@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -56,20 +57,39 @@ public static class DependencyInjection
         services.AddScoped<ILogIngestionStateRepository, LogIngestionStateRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
+        // Outgoing HTTP clients are wrapped with the standard resilience
+        // pipeline (retries with exponential backoff + jitter, per-attempt and
+        // total timeouts, and a circuit breaker) so a flaky feed mirror or
+        // notification endpoint can never hang or crash the Worker. Every
+        // client advertises a dynamic "PiProxyGuard/<version>" User-Agent.
         services.AddHttpClient("blocklists", client =>
         {
-            client.Timeout = TimeSpan.FromSeconds(60);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("PiProxyGuard/1.2");
+            // Blocklist feeds can be large; give the overall request plenty of
+            // time and leave the per-attempt/total budgets to the resilience handler.
+            client.Timeout = TimeSpan.FromSeconds(150);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+        }).AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(60);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(120);
+            // CircuitBreaker.SamplingDuration must be >= 2 x AttemptTimeout.
+            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(120);
         });
         services.AddHttpClient("notifications", client =>
         {
-            client.Timeout = TimeSpan.FromSeconds(20);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("PiProxyGuard/1.2");
+            client.Timeout = TimeSpan.FromSeconds(40);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+        }).AddStandardResilienceHandler(options =>
+        {
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
         });
         services.AddHttpClient("threatintel", client =>
         {
-            client.Timeout = TimeSpan.FromSeconds(20);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("PiProxyGuard/1.2");
+            client.Timeout = TimeSpan.FromSeconds(40);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+        }).AddStandardResilienceHandler(options =>
+        {
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
         });
 
         services.AddSingleton<IProxyLogParser, SquidAccessLogParser>();
@@ -95,6 +115,26 @@ public static class DependencyInjection
         services.AddScoped<SystemDiagnostics>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Cached "PiProxyGuard/&lt;version&gt;" User-Agent built from the assembly
+    /// informational version (git-hash metadata stripped).
+    /// </summary>
+    private static readonly string UserAgent = $"PiProxyGuard/{ResolveVersion()}";
+
+    private static string ResolveVersion()
+    {
+        var assembly = typeof(DependencyInjection).Assembly;
+        var informational = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(informational))
+        {
+            var plus = informational.IndexOf('+', StringComparison.Ordinal);
+            return plus >= 0 ? informational[..plus] : informational;
+        }
+
+        return assembly.GetName().Version?.ToString(3) ?? "1.0";
     }
 
     /// <summary>

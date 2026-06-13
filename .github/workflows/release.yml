@@ -50,6 +50,13 @@ jobs:
           tar -czf "PiProxyGuard-${VERSION}-linux-arm64.tar.gz" -C linux-arm64 .
           cd linux-arm64 && zip -rq "../PiProxyGuard-${VERSION}-linux-arm64.zip" .
 
+      - name: Build .deb package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          chmod +x deploy/build-deb.sh
+          OUT=publish deploy/build-deb.sh publish/linux-arm64 "$VERSION" arm64
+          echo "DEB_VERSION=$VERSION" >> "$GITHUB_ENV"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -58,3 +65,4 @@ jobs:
           files: |
             publish/PiProxyGuard-${{ github.ref_name }}-linux-arm64.tar.gz
             publish/PiProxyGuard-${{ github.ref_name }}-linux-arm64.zip
+            publish/piproxyguard_${{ env.DEB_VERSION }}_arm64.deb

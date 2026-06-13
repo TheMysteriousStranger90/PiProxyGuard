@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.0 — Resilience & API hardening
+
+### Added
+- **Resilient outgoing HTTP.** Added `Microsoft.Extensions.Http.Resilience`; the blocklist, notification and threat-intel clients now use `AddStandardResilienceHandler` (retry with exponential backoff + jitter, per-attempt and total timeouts, circuit breaker), so a flaky feed mirror or notification endpoint can't hang or crash the Worker. Each client now sends a dynamic `User-Agent: PiProxyGuard/<version>` derived from the assembly version.
+- **Optional rate limiting for `/api`.** `Api:RateLimitPerMinute` (> 0) applies a fixed-window limiter per client IP and returns `429` over the limit. The dashboard, SignalR hub, `/health`, `/metrics` and `/swagger` are never limited.
+- **Optional TLS/HSTS.** `Api:UseHttpsRedirection` enables HSTS and HTTP→HTTPS redirection (requires an HTTPS Kestrel endpoint/certificate).
+- **Debian package (`.deb`)** — `sudo apt install ./piproxyguard_X.Y.Z_arm64.deb` installs Squid automatically (via `Depends`) and runs a `postinst` that provisions the service user, Squid config, sudoers and systemd services, then starts them. Built by `deploy/build-deb.sh` and attached to every GitHub Release via `release.yml`.
+- **One-command installer** `deploy/install.sh` for the prebuilt `linux-arm64` release: installs Squid, writes `squid.conf`, creates the `piproxyguard` user + data dir, copies the binaries to `/opt/piproxyguard`, adds the sudoers reload rule, installs the systemd units and starts everything (idempotent). Plus `deploy/uninstall.sh` to reverse it.
+
 ## 1.3.0 — Dashboard
 
 A UI release. Everything the REST API exposes is now available in a built-in
