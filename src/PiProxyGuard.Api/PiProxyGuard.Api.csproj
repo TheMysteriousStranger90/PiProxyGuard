@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PiProxyGuard.Infrastructure\PiProxyGuard.Infrastructure.csproj" />
+    <ProjectReference Include="..\PiProxyGuard.Web\PiProxyGuard.Web.csproj" />
   </ItemGroup>
 
 </Project>

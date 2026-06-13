@@ -1,0 +1,81 @@
+name: Docker Hub (multi-arch)
+
+# Builds and pushes multi-arch (linux/amd64 + linux/arm64) images for the API
+# and Worker to Docker Hub. Runs on version tags and can be triggered manually.
+#
+# Required repository secrets:
+#   DOCKERHUB_USERNAME  - your Docker Hub account/namespace (e.g. "andreyd")
+#   DOCKERHUB_TOKEN     - a Docker Hub access token with Read/Write scope
+#                         (Account Settings -> Security -> New Access Token)
+#
+# Images are published as:
+#   docker.io/<DOCKERHUB_USERNAME>/piproxyguard-api
+#   docker.io/<DOCKERHUB_USERNAME>/piproxyguard-worker
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    # Skip automatically on forks / when the secret is absent so the workflow
+    # never fails for contributors who have not configured Docker Hub.
+    if: ${{ github.repository_owner != '' }}
+    strategy:
+      matrix:
+        include:
+          - image: piproxyguard-api
+            dockerfile: Dockerfile.api
+          - image: piproxyguard-worker
+            dockerfile: Dockerfile.worker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Docker Hub credentials are configured
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
+            echo "::error::DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets must be set." \
+                 "See .github/workflows/dockerhub-publish.yml for instructions."
+            exit 1
+          fi
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Image metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

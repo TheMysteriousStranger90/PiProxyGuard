@@ -1,0 +1,48 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject LiveUpdateNotifier Notifier
+
+<div class="app-shell">
+    <NavMenu />
+    <main class="app-main">
+        <div class="toast-region">
+            @foreach (var toast in _toasts)
+            {
+                <div class="toast" @key="toast">
+                    <span class="toast-icon">🚨</span>
+                    <div class="toast-text">
+                        <strong>@toast.Type</strong>
+                        <div class="toast-body">@toast.ClientIp — @toast.Description</div>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="app-content">
+            @Body
+        </div>
+    </main>
+</div>
+
+@code {
+    private readonly List<AlertDto> _toasts = [];
+
+    protected override void OnInitialized() => Notifier.AlertRaised += OnAlert;
+
+    private void OnAlert(AlertDto alert)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            _toasts.Add(alert);
+            StateHasChanged();
+            await Task.Delay(TimeSpan.FromSeconds(8));
+            _toasts.Remove(alert);
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        Notifier.AlertRaised -= OnAlert;
+        GC.SuppressFinalize(this);
+    }
+}

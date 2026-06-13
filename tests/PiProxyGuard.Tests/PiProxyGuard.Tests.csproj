@@ -21,6 +21,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PiProxyGuard.Infrastructure\PiProxyGuard.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\PiProxyGuard.Web\PiProxyGuard.Web.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
 </Project>

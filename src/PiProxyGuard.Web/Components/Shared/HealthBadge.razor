@@ -1,0 +1,19 @@
+<span class="badge @CssClass">@Label</span>
+
+@code {
+    [Parameter] public DiagnosticStatus Status { get; set; }
+
+    private string CssClass => Status switch
+    {
+        DiagnosticStatus.Ok => "ok",
+        DiagnosticStatus.Warning => "warn",
+        _ => "err"
+    };
+
+    private string Label => Status switch
+    {
+        DiagnosticStatus.Ok => "Healthy",
+        DiagnosticStatus.Warning => "Degraded",
+        _ => "Error"
+    };
+}

@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,10 +39,15 @@ public static class DependencyInjection
         services.Configure<GeoIpOptions>(configuration.GetSection(GeoIpOptions.SectionName));
         services.Configure<ThreatIntelOptions>(configuration.GetSection(ThreatIntelOptions.SectionName));
 
-        var connectionString = configuration.GetConnectionString("Default")
-            ?? "Data Source=piproxyguard.db";
+        var connectionString = NormalizeSqliteConnectionString(
+            configuration.GetConnectionString("Default") ?? "Data Source=piproxyguard.db");
 
-        services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
+        // WAL + busy_timeout (via the interceptor) let the Worker and the API
+        // share one SQLite file without "database is locked" errors during the
+        // large blocklist refresh.
+        services.AddDbContext<AppDbContext>(options => options
+            .UseSqlite(connectionString)
+            .AddInterceptors(SqlitePragmaConnectionInterceptor.Instance));
 
         services.AddScoped<IProxyLogRepository, ProxyLogRepository>();
         services.AddScoped<IBlockedDomainRepository, BlockedDomainRepository>();
@@ -89,5 +95,31 @@ public static class DependencyInjection
         services.AddScoped<SystemDiagnostics>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Drops shared-cache mode from a keyword-style SQLite connection string.
+    /// Shared cache surfaces "SQLite Error 6: database table is locked" on
+    /// cross-connection read/write; WAL plus a private cache is the robust
+    /// combination. URI-style data sources (used by the in-memory test
+    /// fixtures) are left untouched.
+    /// </summary>
+    private static string NormalizeSqliteConnectionString(string connectionString)
+    {
+        try
+        {
+            var builder = new SqliteConnectionStringBuilder(connectionString);
+            if (builder.Cache == SqliteCacheMode.Shared)
+            {
+                builder.Cache = SqliteCacheMode.Default;
+                return builder.ToString();
+            }
+        }
+        catch (ArgumentException)
+        {
+            // Not a parseable keyword string (e.g. a raw URI) — use as-is.
+        }
+
+        return connectionString;
     }
 }

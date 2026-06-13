@@ -1,0 +1,184 @@
+@page "/"
+@inherits LivePageComponent
+
+<PageTitle>Dashboard · PiProxyGuard</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Dashboard</h1>
+        <p class="muted"><span class="live-dot"></span> Live · updated @Format.Ago(_loadedAt)</p>
+    </div>
+    <RangePicker Hours="_hours" OnChange="OnRangeChanged" />
+</div>
+
+@if (_summary is null)
+{
+    <p class="muted">Loading…</p>
+}
+else
+{
+    <div class="card-grid">
+        <div class="stat-card">
+            <div class="stat-label">Requests</div>
+            <div class="stat-value">@Format.Number(_summary.TotalRequests)</div>
+            <div class="stat-foot">@Format.Bytes(_summary.TotalBytes) transferred</div>
+        </div>
+        <div class="stat-card danger">
+            <div class="stat-label">Denied</div>
+            <div class="stat-value">@Format.Number(_summary.DeniedRequests)</div>
+            <div class="stat-foot">@DeniedPercent% of requests</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Client devices</div>
+            <div class="stat-value">@Format.Number(_summary.UniqueClients)</div>
+            <div class="stat-foot">active in window</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Unique hosts</div>
+            <div class="stat-value">@Format.Number(_summary.UniqueHosts)</div>
+            <div class="stat-foot">distinct destinations</div>
+        </div>
+    </div>
+
+    <div class="two-col">
+        <section class="panel">
+            <div class="panel-head"><h2>Top destinations</h2></div>
+            @if (_topHosts.Count == 0)
+            {
+                <p class="muted pad">No traffic in this window.</p>
+            }
+            else
+            {
+                <table class="data-table">
+                    <thead><tr><th>Host</th><th class="num">Requests</th><th class="num">Data</th></tr></thead>
+                    <tbody>
+                        @foreach (var host in _topHosts)
+                        {
+                            <tr>
+                                <td class="ellipsis">@host.Host</td>
+                                <td class="num">@Format.Number(host.Requests)</td>
+                                <td class="num">@Format.Bytes(host.Bytes)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+
+        <section class="panel">
+            <div class="panel-head"><h2>Top devices</h2></div>
+            @if (_topClients.Count == 0)
+            {
+                <p class="muted pad">No client activity.</p>
+            }
+            else
+            {
+                <table class="data-table">
+                    <thead><tr><th>Client IP</th><th class="num">Requests</th><th class="num">Denied</th></tr></thead>
+                    <tbody>
+                        @foreach (var client in _topClients)
+                        {
+                            <tr>
+                                <td>@client.ClientIp</td>
+                                <td class="num">@Format.Number(client.Requests)</td>
+                                <td class="num">@(client.DeniedRequests > 0 ? Format.Number(client.DeniedRequests) : "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+    </div>
+
+    <div class="two-col">
+        <section class="panel">
+            <div class="panel-head">
+                <h2>Open alerts</h2>
+                <a class="link" href="alerts">View all →</a>
+            </div>
+            @if (_alerts.Count == 0)
+            {
+                <p class="muted pad">No open alerts. 🎉</p>
+            }
+            else
+            {
+                <ul class="alert-list">
+                    @foreach (var alert in _alerts)
+                    {
+                        <li>
+                            <span class="alert-type">@alert.Type</span>
+                            <div class="alert-meta">
+                                <strong>@alert.ClientIp</strong> · @Format.Ago(alert.DetectedAtUtc)
+                                <div class="muted">@alert.Description</div>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
+        <section class="panel">
+            <div class="panel-head">
+                <h2>System health</h2>
+                @if (_diag is not null)
+                {
+                    <HealthBadge Status="_diag.Status" />
+                }
+            </div>
+            @if (_diag is not null)
+            {
+                <ul class="check-list">
+                    @foreach (var check in _diag.Checks)
+                    {
+                        <li>
+                            <span class="dot @StatusClass(check.Status)"></span>
+                            <div>
+                                <strong>@check.Name</strong>
+                                <div class="muted">@check.Detail</div>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private TrafficSummary? _summary;
+    private IReadOnlyList<HostTraffic> _topHosts = [];
+    private IReadOnlyList<ClientTraffic> _topClients = [];
+    private List<AlertDto> _alerts = [];
+    private DiagnosticsReport? _diag;
+    private int _hours = 24;
+    private DateTime _loadedAt = DateTime.UtcNow;
+
+    private int DeniedPercent => _summary is { TotalRequests: > 0 }
+        ? (int)Math.Round(100.0 * _summary.DeniedRequests / _summary.TotalRequests)
+        : 0;
+
+    protected override async Task LoadAsync()
+    {
+        var to = DateTime.UtcNow;
+        var from = to.AddHours(-_hours);
+        _summary = await Dashboard.GetSummaryAsync(from, to);
+        _topHosts = await Dashboard.GetTopHostsAsync(from, to, 8);
+        _topClients = await Dashboard.GetTopClientsAsync(from, to, 8);
+        _alerts = await Dashboard.GetAlertsAsync(onlyUnacknowledged: true, count: 6);
+        _diag = await Dashboard.GetDiagnosticsAsync();
+        _loadedAt = DateTime.UtcNow;
+    }
+
+    private async Task OnRangeChanged(int hours)
+    {
+        _hours = hours;
+        await ReloadAsync();
+    }
+
+    private static string StatusClass(DiagnosticStatus status) => status switch
+    {
+        DiagnosticStatus.Ok => "ok",
+        DiagnosticStatus.Warning => "warn",
+        _ => "err"
+    };
+}

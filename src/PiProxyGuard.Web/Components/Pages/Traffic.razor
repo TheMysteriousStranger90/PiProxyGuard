@@ -1,0 +1,127 @@
+@page "/traffic"
+@inherits LivePageComponent
+
+<PageTitle>Traffic · PiProxyGuard</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Traffic</h1>
+        <p class="muted">Where your network's requests go.</p>
+    </div>
+    <RangePicker Hours="_hours" OnChange="OnRangeChanged" />
+</div>
+
+<div class="two-col">
+    <section class="panel">
+        <div class="panel-head"><h2>By category</h2></div>
+        @if (_categories.Count == 0)
+        {
+            <p class="muted pad">No traffic in this window.</p>
+        }
+        else
+        {
+            <div class="bars">
+                @foreach (var category in _categories)
+                {
+                    <div class="bar-row">
+                        <div class="bar-label">@category.Category</div>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width:@Percent(category.Requests, _maxCategory)%"></div>
+                        </div>
+                        <div class="bar-value">@Format.Number(category.Requests)</div>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="panel">
+        <div class="panel-head"><h2>HTTP status codes</h2></div>
+        @if (_statuses.Count == 0)
+        {
+            <p class="muted pad">No responses recorded.</p>
+        }
+        else
+        {
+            <div class="bars">
+                @foreach (var status in _statuses)
+                {
+                    <div class="bar-row">
+                        <div class="bar-label">@StatusLabel(status.StatusCode)</div>
+                        <div class="bar-track">
+                            <div class="bar-fill @StatusClass(status.StatusCode)" style="width:@Percent(status.Count, _maxStatus)%"></div>
+                        </div>
+                        <div class="bar-value">@Format.Number(status.Count)</div>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+</div>
+
+<section class="panel">
+    <div class="panel-head"><h2>Top destinations</h2></div>
+    @if (_hosts.Count == 0)
+    {
+        <p class="muted pad">No traffic in this window.</p>
+    }
+    else
+    {
+        <table class="data-table">
+            <thead><tr><th>#</th><th>Host</th><th class="num">Requests</th><th class="num">Data</th></tr></thead>
+            <tbody>
+                @{ var rank = 0; }
+                @foreach (var host in _hosts)
+                {
+                    rank++;
+                    <tr>
+                        <td class="muted">@rank</td>
+                        <td class="ellipsis">@host.Host</td>
+                        <td class="num">@Format.Number(host.Requests)</td>
+                        <td class="num">@Format.Bytes(host.Bytes)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    private List<CategoryTrafficDto> _categories = [];
+    private IReadOnlyList<HostTraffic> _hosts = [];
+    private IReadOnlyList<StatusCodeCount> _statuses = [];
+    private long _maxCategory = 1;
+    private long _maxStatus = 1;
+    private int _hours = 24;
+
+    protected override async Task LoadAsync()
+    {
+        var to = DateTime.UtcNow;
+        var from = to.AddHours(-_hours);
+        _categories = await Dashboard.GetCategoriesAsync(from, to, 500);
+        _hosts = await Dashboard.GetTopHostsAsync(from, to, 25);
+        _statuses = (await Dashboard.GetStatusCodesAsync(from, to))
+            .OrderByDescending(s => s.Count).ToList();
+        _maxCategory = _categories.Count > 0 ? _categories.Max(c => c.Requests) : 1;
+        _maxStatus = _statuses.Count > 0 ? _statuses.Max(s => s.Count) : 1;
+    }
+
+    private async Task OnRangeChanged(int hours)
+    {
+        _hours = hours;
+        await ReloadAsync();
+    }
+
+    private static int Percent(long value, long max) =>
+        max <= 0 ? 0 : (int)Math.Max(2, Math.Round(100.0 * value / max));
+
+    private static string StatusLabel(int code) => code == 0 ? "—" : code.ToString(CultureInfo.InvariantCulture);
+
+    private static string StatusClass(int code) => code switch
+    {
+        >= 500 => "err",
+        >= 400 => "warn",
+        >= 300 => "info",
+        _ => "ok"
+    };
+}
