@@ -1,11 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using PiProxyGuard.Api.Contracts;
+using PiProxyGuard.Domain.Abstractions;
 using PiProxyGuard.Domain.Common;
 using PiProxyGuard.Domain.Entities;
 using PiProxyGuard.Domain.Enums;
 using PiProxyGuard.Infrastructure.Blocklists;
-using PiProxyGuard.Infrastructure.Persistence;
 
 namespace PiProxyGuard.Api.Controllers;
 
@@ -13,12 +12,12 @@ namespace PiProxyGuard.Api.Controllers;
 [Route("api/blocklist")]
 public class BlocklistController : ControllerBase
 {
-    private readonly AppDbContext _dbContext;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly BlocklistUpdater _updater;
 
-    public BlocklistController(AppDbContext dbContext, BlocklistUpdater updater)
+    public BlocklistController(IUnitOfWork unitOfWork, BlocklistUpdater updater)
     {
-        _dbContext = dbContext;
+        _unitOfWork = unitOfWork;
         _updater = updater;
     }
 
@@ -31,24 +30,19 @@ public class BlocklistController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         count = Math.Clamp(count, 1, 1000);
-        var query = _dbContext.BlockedDomains.AsQueryable();
 
-        if (!string.IsNullOrEmpty(source) && Enum.TryParse<BlockSource>(source, true, out var parsedSource))
+        BlockSource? parsedSource = null;
+        if (!string.IsNullOrEmpty(source) && Enum.TryParse<BlockSource>(source, true, out var value))
         {
-            query = query.Where(d => d.Source == parsedSource);
+            parsedSource = value;
         }
 
-        if (!string.IsNullOrEmpty(search))
-        {
-            query = query.Where(d => d.Domain.Contains(search));
-        }
+        var domains = await _unitOfWork.BlockedDomains.SearchAsync(parsedSource, search, count, cancellationToken);
 
-        return await query
-            .OrderBy(d => d.Domain)
-            .Take(count)
+        return domains
             .Select(d => new BlockedDomainDto(
                 d.Id, d.Domain, d.Source.ToString(), d.Reason, d.CreatedAtUtc, d.IsActive))
-            .ToListAsync(cancellationToken);
+            .ToList();
     }
 
     /// <summary>Adds a manually blocked domain and rewrites the Squid ACL.</summary>
@@ -62,8 +56,7 @@ public class BlocklistController : ControllerBase
             return BadRequest(new { error = $"'{request.Domain}' is not a valid domain." });
         }
 
-        var existing = await _dbContext.BlockedDomains
-            .FirstOrDefaultAsync(d => d.Domain == domain, cancellationToken);
+        var existing = await _unitOfWork.BlockedDomains.FindByDomainAsync(domain, cancellationToken);
         if (existing is not null)
         {
             return Conflict(new { error = $"Domain '{domain}' is already in the blocklist (id {existing.Id})." });
@@ -78,8 +71,8 @@ public class BlocklistController : ControllerBase
             IsActive = true
         };
 
-        _dbContext.BlockedDomains.Add(entity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        _unitOfWork.BlockedDomains.Add(entity);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         await _updater.UpdateAsync(cancellationToken);
 
         var dto = new BlockedDomainDto(
@@ -91,14 +84,14 @@ public class BlocklistController : ControllerBase
     [HttpDelete("{id:long}")]
     public async Task<IActionResult> RemoveBlockedDomain(long id, CancellationToken cancellationToken)
     {
-        var entity = await _dbContext.BlockedDomains.FindAsync([id], cancellationToken);
+        var entity = await _unitOfWork.BlockedDomains.GetByIdAsync(id, cancellationToken);
         if (entity is null)
         {
             return NotFound();
         }
 
-        _dbContext.BlockedDomains.Remove(entity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        _unitOfWork.BlockedDomains.Remove(entity);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         await _updater.UpdateAsync(cancellationToken);
         return NoContent();
     }

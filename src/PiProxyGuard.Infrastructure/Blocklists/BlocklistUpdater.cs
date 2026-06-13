@@ -1,10 +1,9 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PiProxyGuard.Domain.Abstractions;
 using PiProxyGuard.Domain.Entities;
 using PiProxyGuard.Domain.Enums;
 using PiProxyGuard.Infrastructure.Options;
-using PiProxyGuard.Infrastructure.Persistence;
 using PiProxyGuard.Infrastructure.Squid;
 
 namespace PiProxyGuard.Infrastructure.Blocklists;
@@ -14,25 +13,26 @@ public record BlocklistUpdateResult(int TotalActiveDomains, int FeedDomains, boo
 /// <summary>
 /// Downloads all configured blocklist feeds, synchronizes them into the
 /// database (keeping manual/auto entries intact) and rewrites the Squid
-/// ACL file when the effective set of domains changed.
+/// ACL file when the effective set of domains changed. Persistence goes
+/// through <see cref="IUnitOfWork"/> and the blocklist repository.
 /// </summary>
 public class BlocklistUpdater
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly AppDbContext _dbContext;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly SquidAclWriter _aclWriter;
     private readonly BlocklistOptions _options;
     private readonly ILogger<BlocklistUpdater> _logger;
 
     public BlocklistUpdater(
         IHttpClientFactory httpClientFactory,
-        AppDbContext dbContext,
+        IUnitOfWork unitOfWork,
         SquidAclWriter aclWriter,
         IOptions<BlocklistOptions> options,
         ILogger<BlocklistUpdater> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _dbContext = dbContext;
+        _unitOfWork = unitOfWork;
         _aclWriter = aclWriter;
         _options = options.Value;
         _logger = logger;
@@ -43,11 +43,7 @@ public class BlocklistUpdater
         var feedDomains = await DownloadFeedsAsync(cancellationToken);
         await SyncFeedDomainsAsync(feedDomains, cancellationToken);
 
-        var activeDomains = await _dbContext.BlockedDomains
-            .Where(d => d.IsActive)
-            .Select(d => d.Domain)
-            .OrderBy(d => d)
-            .ToListAsync(cancellationToken);
+        var activeDomains = await _unitOfWork.BlockedDomains.GetActiveDomainNamesAsync(cancellationToken);
 
         var aclRewritten = await _aclWriter.WriteIfChangedAsync(activeDomains, cancellationToken);
 
@@ -107,19 +103,15 @@ public class BlocklistUpdater
             return;
         }
 
-        var existing = await _dbContext.BlockedDomains
-            .Where(d => d.Source == BlockSource.Feed)
-            .ToDictionaryAsync(d => d.Domain, cancellationToken);
+        var repository = _unitOfWork.BlockedDomains;
+        var existing = await repository.GetFeedEntriesAsync(cancellationToken);
 
         // Remove feed entries that disappeared from all feeds.
         var stale = existing.Values.Where(d => !feedDomains.Contains(d.Domain)).ToList();
-        _dbContext.BlockedDomains.RemoveRange(stale);
+        repository.RemoveRange(stale);
 
         // Add new feed entries (manual/auto entries take precedence and are not duplicated).
-        var nonFeedDomains = await _dbContext.BlockedDomains
-            .Where(d => d.Source != BlockSource.Feed)
-            .Select(d => d.Domain)
-            .ToListAsync(cancellationToken);
+        var nonFeedDomains = await repository.GetNonFeedDomainNamesAsync(cancellationToken);
         var occupied = nonFeedDomains.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var now = DateTime.UtcNow;
@@ -127,7 +119,7 @@ public class BlocklistUpdater
         {
             if (!existing.ContainsKey(domain) && !occupied.Contains(domain))
             {
-                _dbContext.BlockedDomains.Add(new BlockedDomain
+                repository.Add(new BlockedDomain
                 {
                     Domain = domain,
                     Source = BlockSource.Feed,
@@ -138,6 +130,6 @@ public class BlocklistUpdater
             }
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }

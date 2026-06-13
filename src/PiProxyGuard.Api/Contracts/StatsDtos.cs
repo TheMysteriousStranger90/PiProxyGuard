@@ -1,5 +1,9 @@
 namespace PiProxyGuard.Api.Contracts;
 
+// ---------------------------------------------------------------------------
+// Traffic statistics
+// ---------------------------------------------------------------------------
+
 public record TrafficSummaryDto(
     DateTime FromUtc,
     DateTime ToUtc,
@@ -17,9 +21,36 @@ public record TimelinePointDto(DateTime BucketStartUtc, long Requests, long Byte
 
 public record StatusCodeDto(int StatusCode, long Count);
 
+/// <summary>HTTP method breakdown — surfaces <c>ProxyLogEntry.Method</c>.</summary>
+public record HttpMethodStatDto(string Method, long Requests, long Bytes);
+
+/// <summary>Response content-type breakdown — surfaces <c>ProxyLogEntry.ContentType</c>.</summary>
+public record ContentTypeStatDto(string ContentType, long Requests, long Bytes);
+
+/// <summary>Squid result-code breakdown — surfaces <c>ProxyLogEntry.ResultCode</c>.</summary>
+public record ResultCodeStatDto(string ResultCode, long Requests, long Bytes);
+
+/// <summary>Per-host latency — surfaces <c>ProxyLogEntry.ElapsedMs</c>.</summary>
+public record HostPerformanceDto(string Host, long Requests, double AverageElapsedMs, int MaxElapsedMs);
+
+/// <summary>Operational view of the log ingestion bookmark (<c>LogIngestionState</c>).</summary>
+public record IngestionStatusDto(
+    string FilePath,
+    long Offset,
+    bool HasRotationFingerprint,
+    DateTime UpdatedAtUtc);
+
+// ---------------------------------------------------------------------------
+// Blocklist
+// ---------------------------------------------------------------------------
+
 public record AddBlockedDomainRequest(string Domain, string? Reason);
 
 public record BlockedDomainDto(long Id, string Domain, string Source, string? Reason, DateTime CreatedAtUtc, bool IsActive);
+
+// ---------------------------------------------------------------------------
+// Alerts
+// ---------------------------------------------------------------------------
 
 public record AlertDto(
     long Id,

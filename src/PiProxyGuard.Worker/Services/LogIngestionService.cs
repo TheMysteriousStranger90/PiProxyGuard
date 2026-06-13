@@ -1,16 +1,16 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PiProxyGuard.Domain.Abstractions;
+using PiProxyGuard.Domain.Abstractions.Repositories;
 using PiProxyGuard.Domain.Entities;
 using PiProxyGuard.Infrastructure.Options;
 using PiProxyGuard.Infrastructure.Parsing;
-using PiProxyGuard.Infrastructure.Persistence;
 
 namespace PiProxyGuard.Worker.Services;
 
 /// <summary>
 /// Tails the Squid access log, parses new lines and stores them in SQLite.
 /// Resumes from the last byte offset after restarts and survives log rotation.
+/// Persistence goes through <see cref="IUnitOfWork"/>.
 /// </summary>
 public class LogIngestionService : BackgroundService
 {
@@ -57,9 +57,9 @@ public class LogIngestionService : BackgroundService
     private async Task IngestOnceAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
-        var state = dbContext.IngestionStates.FirstOrDefault(s => s.FilePath == _options.Path)
+        var state = await unitOfWork.IngestionStates.GetByFilePathAsync(_options.Path, cancellationToken)
             ?? new LogIngestionState { FilePath = _options.Path };
 
         var result = LogFileTailer.ReadNewLines(_options.Path, state.Offset, state.FirstLineFingerprint);
@@ -80,8 +80,8 @@ public class LogIngestionService : BackgroundService
 
                 if (batch.Count >= _options.BatchSize)
                 {
-                    dbContext.LogEntries.AddRange(batch);
-                    await dbContext.SaveChangesAsync(cancellationToken);
+                    unitOfWork.ProxyLogs.AddRange(batch);
+                    await unitOfWork.SaveChangesAsync(cancellationToken);
                     batch.Clear();
                 }
             }
@@ -89,7 +89,7 @@ public class LogIngestionService : BackgroundService
 
         if (batch.Count > 0)
         {
-            dbContext.LogEntries.AddRange(batch);
+            unitOfWork.ProxyLogs.AddRange(batch);
         }
 
         state.Offset = result.NewOffset;
@@ -98,11 +98,11 @@ public class LogIngestionService : BackgroundService
 
         if (state.Id == 0)
         {
-            dbContext.IngestionStates.Add(state);
+            unitOfWork.IngestionStates.Add(state);
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await CleanupOldEntriesAsync(dbContext, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await CleanupOldEntriesAsync(unitOfWork, cancellationToken);
 
         if (parsed > 0)
         {
@@ -110,7 +110,7 @@ public class LogIngestionService : BackgroundService
         }
     }
 
-    private async Task CleanupOldEntriesAsync(AppDbContext dbContext, CancellationToken cancellationToken)
+    private async Task CleanupOldEntriesAsync(IUnitOfWork unitOfWork, CancellationToken cancellationToken)
     {
         if (_options.RetentionDays <= 0)
         {
@@ -118,8 +118,6 @@ public class LogIngestionService : BackgroundService
         }
 
         var cutoff = DateTime.UtcNow.AddDays(-_options.RetentionDays);
-        await dbContext.LogEntries
-            .Where(e => e.TimestampUtc < cutoff)
-            .ExecuteDeleteAsync(cancellationToken);
+        await unitOfWork.ProxyLogs.DeleteOlderThanAsync(cutoff, cancellationToken);
     }
 }

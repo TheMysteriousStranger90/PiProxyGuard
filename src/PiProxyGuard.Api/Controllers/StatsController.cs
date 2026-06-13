@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using PiProxyGuard.Api.Contracts;
-using PiProxyGuard.Infrastructure.Persistence;
+using PiProxyGuard.Domain.Abstractions;
+using PiProxyGuard.Domain.Statistics;
 
 namespace PiProxyGuard.Api.Controllers;
 
@@ -9,9 +9,9 @@ namespace PiProxyGuard.Api.Controllers;
 [Route("api/stats")]
 public class StatsController : ControllerBase
 {
-    private readonly AppDbContext _dbContext;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public StatsController(AppDbContext dbContext) => _dbContext = dbContext;
+    public StatsController(IUnitOfWork unitOfWork) => _unitOfWork = unitOfWork;
 
     /// <summary>Overall traffic summary for a period (defaults to the last 24 hours).</summary>
     [HttpGet("summary")]
@@ -19,28 +19,15 @@ public class StatsController : ControllerBase
         [FromQuery] DateTime? fromUtc, [FromQuery] DateTime? toUtc, CancellationToken cancellationToken)
     {
         var (from, to) = NormalizeRange(fromUtc, toUtc);
-        var query = _dbContext.LogEntries.Where(e => e.TimestampUtc >= from && e.TimestampUtc < to);
-
-        var summary = await query
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                TotalRequests = g.LongCount(),
-                TotalBytes = g.Sum(e => e.Bytes),
-                DeniedRequests = g.LongCount(e => e.WasDenied)
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var uniqueClients = await query.Select(e => e.ClientIp).Distinct().CountAsync(cancellationToken);
-        var uniqueHosts = await query.Where(e => e.Host != "").Select(e => e.Host).Distinct().CountAsync(cancellationToken);
+        var summary = await _unitOfWork.ProxyLogs.GetTrafficSummaryAsync(from, to, cancellationToken);
 
         return new TrafficSummaryDto(
             from, to,
-            summary?.TotalRequests ?? 0,
-            summary?.TotalBytes ?? 0,
-            summary?.DeniedRequests ?? 0,
-            uniqueClients,
-            uniqueHosts);
+            summary.TotalRequests,
+            summary.TotalBytes,
+            summary.DeniedRequests,
+            summary.UniqueClients,
+            summary.UniqueHosts);
     }
 
     /// <summary>Most requested hosts by request count.</summary>
@@ -52,14 +39,7 @@ public class StatsController : ControllerBase
         var (from, to) = NormalizeRange(fromUtc, toUtc);
         count = Math.Clamp(count, 1, 200);
 
-        var hosts = await _dbContext.LogEntries
-            .Where(e => e.TimestampUtc >= from && e.TimestampUtc < to && e.Host != "")
-            .GroupBy(e => e.Host)
-            .Select(g => new { Host = g.Key, Requests = g.LongCount(), Bytes = g.Sum(e => e.Bytes) })
-            .OrderByDescending(x => x.Requests)
-            .Take(count)
-            .ToListAsync(cancellationToken);
-
+        var hosts = await _unitOfWork.ProxyLogs.GetTopHostsAsync(from, to, count, cancellationToken);
         return hosts.Select(x => new TopHostDto(x.Host, x.Requests, x.Bytes)).ToList();
     }
 
@@ -72,21 +52,8 @@ public class StatsController : ControllerBase
         var (from, to) = NormalizeRange(fromUtc, toUtc);
         count = Math.Clamp(count, 1, 200);
 
-        var clients = await _dbContext.LogEntries
-            .Where(e => e.TimestampUtc >= from && e.TimestampUtc < to)
-            .GroupBy(e => e.ClientIp)
-            .Select(g => new
-            {
-                ClientIp = g.Key,
-                Requests = g.LongCount(),
-                Bytes = g.Sum(e => e.Bytes),
-                Denied = g.LongCount(e => e.WasDenied)
-            })
-            .OrderByDescending(x => x.Bytes)
-            .Take(count)
-            .ToListAsync(cancellationToken);
-
-        return clients.Select(x => new TopClientDto(x.ClientIp, x.Requests, x.Bytes, x.Denied)).ToList();
+        var clients = await _unitOfWork.ProxyLogs.GetTopClientsAsync(from, to, count, cancellationToken);
+        return clients.Select(x => new TopClientDto(x.ClientIp, x.Requests, x.Bytes, x.DeniedRequests)).ToList();
     }
 
     /// <summary>Requests and bytes per hour (or per day with interval=day).</summary>
@@ -96,30 +63,12 @@ public class StatsController : ControllerBase
         [FromQuery] string interval = "hour", CancellationToken cancellationToken = default)
     {
         var (from, to) = NormalizeRange(fromUtc, toUtc);
-        var byDay = string.Equals(interval, "day", StringComparison.OrdinalIgnoreCase);
+        var bucket = string.Equals(interval, "day", StringComparison.OrdinalIgnoreCase)
+            ? TimelineInterval.Day
+            : TimelineInterval.Hour;
 
-        var buckets = await _dbContext.LogEntries
-            .Where(e => e.TimestampUtc >= from && e.TimestampUtc < to)
-            .GroupBy(e => new
-            {
-                e.TimestampUtc.Year,
-                e.TimestampUtc.Month,
-                e.TimestampUtc.Day,
-                Hour = byDay ? 0 : e.TimestampUtc.Hour
-            })
-            .Select(g => new
-            {
-                g.Key.Year, g.Key.Month, g.Key.Day, g.Key.Hour,
-                Requests = g.LongCount(),
-                Bytes = g.Sum(e => e.Bytes)
-            })
-            .ToListAsync(cancellationToken);
-
-        return buckets
-            .Select(b => new TimelinePointDto(
-                new DateTime(b.Year, b.Month, b.Day, b.Hour, 0, 0, DateTimeKind.Utc), b.Requests, b.Bytes))
-            .OrderBy(p => p.BucketStartUtc)
-            .ToList();
+        var buckets = await _unitOfWork.ProxyLogs.GetTimelineAsync(from, to, bucket, cancellationToken);
+        return buckets.Select(b => new TimelinePointDto(b.BucketStartUtc, b.Requests, b.Bytes)).ToList();
     }
 
     /// <summary>Distribution of HTTP status codes for the period.</summary>
@@ -128,15 +77,70 @@ public class StatsController : ControllerBase
         [FromQuery] DateTime? fromUtc, [FromQuery] DateTime? toUtc, CancellationToken cancellationToken = default)
     {
         var (from, to) = NormalizeRange(fromUtc, toUtc);
-
-        var codes = await _dbContext.LogEntries
-            .Where(e => e.TimestampUtc >= from && e.TimestampUtc < to)
-            .GroupBy(e => e.StatusCode)
-            .Select(g => new { StatusCode = g.Key, Count = g.LongCount() })
-            .OrderByDescending(x => x.Count)
-            .ToListAsync(cancellationToken);
-
+        var codes = await _unitOfWork.ProxyLogs.GetStatusCodeBreakdownAsync(from, to, cancellationToken);
         return codes.Select(x => new StatusCodeDto(x.StatusCode, x.Count)).ToList();
+    }
+
+    /// <summary>Distribution of HTTP methods (GET, POST, CONNECT, ...) for the period.</summary>
+    [HttpGet("methods")]
+    public async Task<ActionResult<List<HttpMethodStatDto>>> GetMethods(
+        [FromQuery] DateTime? fromUtc, [FromQuery] DateTime? toUtc, CancellationToken cancellationToken = default)
+    {
+        var (from, to) = NormalizeRange(fromUtc, toUtc);
+        var methods = await _unitOfWork.ProxyLogs.GetMethodBreakdownAsync(from, to, cancellationToken);
+        return methods.Select(x => new HttpMethodStatDto(x.Method, x.Requests, x.Bytes)).ToList();
+    }
+
+    /// <summary>Most common response content types (text/html, image/png, ...).</summary>
+    [HttpGet("content-types")]
+    public async Task<ActionResult<List<ContentTypeStatDto>>> GetContentTypes(
+        [FromQuery] DateTime? fromUtc, [FromQuery] DateTime? toUtc,
+        [FromQuery] int count = 20, CancellationToken cancellationToken = default)
+    {
+        var (from, to) = NormalizeRange(fromUtc, toUtc);
+        count = Math.Clamp(count, 1, 200);
+
+        var types = await _unitOfWork.ProxyLogs.GetContentTypeBreakdownAsync(from, to, count, cancellationToken);
+        return types.Select(x => new ContentTypeStatDto(x.ContentType, x.Requests, x.Bytes)).ToList();
+    }
+
+    /// <summary>Distribution of Squid result codes (TCP_HIT, TCP_MISS, TCP_DENIED, ...).</summary>
+    [HttpGet("result-codes")]
+    public async Task<ActionResult<List<ResultCodeStatDto>>> GetResultCodes(
+        [FromQuery] DateTime? fromUtc, [FromQuery] DateTime? toUtc, CancellationToken cancellationToken = default)
+    {
+        var (from, to) = NormalizeRange(fromUtc, toUtc);
+        var codes = await _unitOfWork.ProxyLogs.GetResultCodeBreakdownAsync(from, to, cancellationToken);
+        return codes.Select(x => new ResultCodeStatDto(x.ResultCode, x.Requests, x.Bytes)).ToList();
+    }
+
+    /// <summary>Slowest hosts by average proxy latency (only hosts with enough requests).</summary>
+    [HttpGet("performance")]
+    public async Task<ActionResult<List<HostPerformanceDto>>> GetPerformance(
+        [FromQuery] DateTime? fromUtc, [FromQuery] DateTime? toUtc,
+        [FromQuery] int count = 20, [FromQuery] int minRequests = 5,
+        CancellationToken cancellationToken = default)
+    {
+        var (from, to) = NormalizeRange(fromUtc, toUtc);
+        count = Math.Clamp(count, 1, 200);
+        minRequests = Math.Clamp(minRequests, 1, 100_000);
+
+        var hosts = await _unitOfWork.ProxyLogs.GetSlowestHostsAsync(from, to, count, minRequests, cancellationToken);
+        return hosts
+            .Select(x => new HostPerformanceDto(
+                x.Host, x.Requests, Math.Round(x.AverageElapsedMs, 1), x.MaxElapsedMs))
+            .ToList();
+    }
+
+    /// <summary>Log ingestion bookmarks — file path, byte offset and last-updated time.</summary>
+    [HttpGet("ingestion")]
+    public async Task<ActionResult<List<IngestionStatusDto>>> GetIngestionStatus(CancellationToken cancellationToken)
+    {
+        var states = await _unitOfWork.IngestionStates.GetAllAsync(cancellationToken);
+        return states
+            .Select(s => new IngestionStatusDto(
+                s.FilePath, s.Offset, !string.IsNullOrEmpty(s.FirstLineFingerprint), s.UpdatedAtUtc))
+            .ToList();
     }
 
     private static (DateTime From, DateTime To) NormalizeRange(DateTime? fromUtc, DateTime? toUtc)

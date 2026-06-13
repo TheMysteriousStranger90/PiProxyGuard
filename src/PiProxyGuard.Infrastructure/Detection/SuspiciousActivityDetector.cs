@@ -1,30 +1,31 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PiProxyGuard.Domain.Abstractions;
+using PiProxyGuard.Domain.Abstractions.Repositories;
 using PiProxyGuard.Domain.Entities;
 using PiProxyGuard.Domain.Enums;
 using PiProxyGuard.Infrastructure.Options;
-using PiProxyGuard.Infrastructure.Persistence;
 
 namespace PiProxyGuard.Infrastructure.Detection;
 
 /// <summary>
 /// Analyzes a sliding window of log entries and raises alerts for clients
 /// that behave suspiciously: request floods, traffic spikes, repeated
-/// denied requests and contacts with blocklisted domains.
+/// denied requests and contacts with blocklisted domains. Reads and writes
+/// go through <see cref="IUnitOfWork"/>.
 /// </summary>
 public class SuspiciousActivityDetector
 {
-    private readonly AppDbContext _dbContext;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly DetectionOptions _options;
     private readonly ILogger<SuspiciousActivityDetector> _logger;
 
     public SuspiciousActivityDetector(
-        AppDbContext dbContext,
+        IUnitOfWork unitOfWork,
         IOptions<DetectionOptions> options,
         ILogger<SuspiciousActivityDetector> logger)
     {
-        _dbContext = dbContext;
+        _unitOfWork = unitOfWork;
         _options = options.Value;
         _logger = logger;
     }
@@ -33,17 +34,8 @@ public class SuspiciousActivityDetector
     {
         var windowStartUtc = windowEndUtc.AddMinutes(-_options.WindowMinutes);
 
-        var perClient = await _dbContext.LogEntries
-            .Where(e => e.TimestampUtc >= windowStartUtc && e.TimestampUtc < windowEndUtc)
-            .GroupBy(e => e.ClientIp)
-            .Select(g => new
-            {
-                ClientIp = g.Key,
-                Requests = g.Count(),
-                Bytes = g.Sum(e => e.Bytes),
-                Denied = g.Count(e => e.WasDenied)
-            })
-            .ToListAsync(cancellationToken);
+        var perClient = await _unitOfWork.ProxyLogs
+            .GetClientWindowStatsAsync(windowStartUtc, windowEndUtc, cancellationToken);
 
         var alerts = new List<SuspiciousActivityAlert>();
 
@@ -73,8 +65,8 @@ public class SuspiciousActivityDetector
         var newAlerts = await FilterDuplicatesAsync(alerts, cancellationToken);
         if (newAlerts.Count > 0)
         {
-            _dbContext.Alerts.AddRange(newAlerts);
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            _unitOfWork.Alerts.AddRange(newAlerts);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             _logger.LogWarning("Raised {Count} suspicious-activity alerts", newAlerts.Count);
         }
 
@@ -84,17 +76,8 @@ public class SuspiciousActivityDetector
     private async Task<List<SuspiciousActivityAlert>> DetectBlockedDomainContactsAsync(
         DateTime windowStartUtc, DateTime windowEndUtc, CancellationToken cancellationToken)
     {
-        // Join in SQL so we never load the full blocklist into memory.
-        var contacts = await _dbContext.LogEntries
-            .Where(e => e.TimestampUtc >= windowStartUtc && e.TimestampUtc < windowEndUtc && e.Host != "")
-            .Join(
-                _dbContext.BlockedDomains.Where(d => d.IsActive),
-                entry => entry.Host,
-                blocked => blocked.Domain,
-                (entry, blocked) => new { entry.ClientIp, blocked.Domain })
-            .GroupBy(x => new { x.ClientIp, x.Domain })
-            .Select(g => new { g.Key.ClientIp, g.Key.Domain, Count = g.Count() })
-            .ToListAsync(cancellationToken);
+        var contacts = await _unitOfWork.ProxyLogs
+            .GetBlockedDomainContactsAsync(windowStartUtc, windowEndUtc, cancellationToken);
 
         return contacts
             .Select(c => CreateAlert(c.ClientIp, AlertType.BlockedDomainContact, windowStartUtc, windowEndUtc,
@@ -113,13 +96,12 @@ public class SuspiciousActivityDetector
         // Suppress repeats: skip an alert when the same client already has an
         // unacknowledged alert of the same type within the last hour.
         var since = DateTime.UtcNow.AddHours(-1);
-        var recent = await _dbContext.Alerts
-            .Where(a => a.DetectedAtUtc >= since && !a.IsAcknowledged)
-            .Select(a => new { a.ClientIp, a.Type })
-            .ToListAsync(cancellationToken);
+        var recent = await _unitOfWork.Alerts.GetRecentOpenAlertKeysAsync(since, cancellationToken);
 
-        var recentKeys = recent.Select(r => (r.ClientIp, r.Type)).ToHashSet();
-        return candidates.Where(c => !recentKeys.Contains((c.ClientIp, c.Type))).ToList();
+        var recentKeys = recent.ToHashSet();
+        return candidates
+            .Where(c => !recentKeys.Contains(new AlertKey(c.ClientIp, c.Type)))
+            .ToList();
     }
 
     private static SuspiciousActivityAlert CreateAlert(

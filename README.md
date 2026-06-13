@@ -28,13 +28,21 @@ Squid (or any proxy writing the Squid native log format) does the proxying; PiPr
 
 | Project | Purpose |
 |---|---|
-| `PiProxyGuard.Domain` | Entities, enums, parser/feed abstractions — no dependencies |
-| `PiProxyGuard.Infrastructure` | EF Core + SQLite, Squid log parser, file tailer, blocklist feeds (plain/hosts/HTML via AngleSharp), ACL writer, detector |
+| `PiProxyGuard.Domain` | Entities, enums, parser/feed abstractions, **repository + Unit of Work abstractions**, statistics read models — no dependencies |
+| `PiProxyGuard.Infrastructure` | EF Core + SQLite, **repository + Unit of Work implementations**, Squid log parser, file tailer, blocklist feeds (plain/hosts/HTML via AngleSharp), ACL writer, detector |
 | `PiProxyGuard.Worker` | `BackgroundService` host: ingestion, blocklist updates, detection |
 | `PiProxyGuard.Api` | ASP.NET Core Web API + Swagger, optional API key |
-| `PiProxyGuard.Tests` | xUnit tests for parser, tailer, feeds and detector |
+| `PiProxyGuard.Tests` | xUnit tests for parser, tailer, feeds, detector and the stats repository |
 
 Worker and API are separate systemd services sharing one SQLite file (`Cache=Shared`; both apply migrations on startup, so start order does not matter).
+
+### Data access: Repository + Unit of Work
+
+All persistence goes through the **Repository** and **Unit of Work** patterns instead of injecting `AppDbContext` directly:
+
+- `IUnitOfWork` (Domain) owns one `AppDbContext` per scope and exposes aggregate-specific repositories (`ProxyLogs`, `BlockedDomains`, `Alerts`, `IngestionStates`); `SaveChangesAsync` commits all staged changes in one transaction.
+- `IRepository<T>` provides the shared write operations; each repository (e.g. `IProxyLogRepository`) adds its own query methods that run as SQL `GROUP BY` and return small read models from `PiProxyGuard.Domain.Statistics` — controllers, the detector and the worker never touch EF Core or `IQueryable`.
+- Implementations live in `PiProxyGuard.Infrastructure.Persistence.Repositories`; everything is registered as scoped in `AddPiProxyGuardInfrastructure`.
 
 ## API overview
 
@@ -45,6 +53,11 @@ Worker and API are separate systemd services sharing one SQLite file (`Cache=Sha
 | `GET /api/stats/top-clients?count=20` | Most active devices by traffic |
 | `GET /api/stats/timeline?interval=hour\|day` | Requests/bytes per bucket |
 | `GET /api/stats/status-codes` | HTTP status distribution |
+| `GET /api/stats/methods` | HTTP method distribution (GET, POST, CONNECT, ...) |
+| `GET /api/stats/content-types?count=20` | Response content-type distribution |
+| `GET /api/stats/result-codes` | Squid result-code distribution (TCP_HIT, TCP_MISS, TCP_DENIED, ...) |
+| `GET /api/stats/performance?count=20&minRequests=5` | Slowest hosts by average proxy latency |
+| `GET /api/stats/ingestion` | Log ingestion bookmarks (file, byte offset, last update) |
 | `GET /api/alerts?onlyUnacknowledged=true` | Suspicious-activity alerts |
 | `POST /api/alerts/{id}/acknowledge` | Close an alert |
 | `GET /api/blocklist?source=Manual&search=ads` | Browse the blocklist |
@@ -118,7 +131,7 @@ Set `Api:ApiKey` in `appsettings.json` to require an `X-Api-Key` header on every
 ## Running locally (development)
 
 ```bash
-dotnet test                                       # 36 unit tests
+dotnet test                                       # 40 unit tests
 cd src/PiProxyGuard.Worker && dotnet run          # uses sample-logs/access.log, local sqlite + acl file
 cd src/PiProxyGuard.Api    && dotnet run          # http://localhost:5080/swagger
 ```
@@ -136,6 +149,7 @@ cd src/PiProxyGuard.Api    && dotnet run          # http://localhost:5080/swagge
 ## Notes & ideas
 
 - The parser is pluggable (`IProxyLogParser`) — add a `ThreeProxyLogParser` if you switch from Squid to 3proxy.
+- Every column the parser captures is now surfaced: `Method`, `ContentType`, `ResultCode` and `ElapsedMs` drive the `/methods`, `/content-types`, `/result-codes` and `/performance` endpoints, and the ingestion bookmark is exposed via `/ingestion`.
 - `Detection:AutoBlockSuspiciousHosts` is reserved for auto-blocking hosts behind repeated denied requests; wire it up in `SuspiciousActivityDetector` if you want fully automatic blocking.
 - SQLite WAL + shared cache handles the two processes fine at home-network scale (tens of requests/second).
 - Pair the Pi with WireGuard for remote access; the API then stays LAN-only.

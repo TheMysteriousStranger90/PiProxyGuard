@@ -2,11 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PiProxyGuard.Domain.Abstractions;
+using PiProxyGuard.Domain.Abstractions.Repositories;
 using PiProxyGuard.Infrastructure.Blocklists;
 using PiProxyGuard.Infrastructure.Detection;
 using PiProxyGuard.Infrastructure.Options;
 using PiProxyGuard.Infrastructure.Parsing;
 using PiProxyGuard.Infrastructure.Persistence;
+using PiProxyGuard.Infrastructure.Persistence.Repositories;
 using PiProxyGuard.Infrastructure.Squid;
 
 namespace PiProxyGuard.Infrastructure;
@@ -30,10 +32,16 @@ public static class DependencyInjection
 
         services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
 
+        services.AddScoped<IProxyLogRepository, ProxyLogRepository>();
+        services.AddScoped<IBlockedDomainRepository, BlockedDomainRepository>();
+        services.AddScoped<IAlertRepository, AlertRepository>();
+        services.AddScoped<ILogIngestionStateRepository, LogIngestionStateRepository>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+
         services.AddHttpClient("blocklists", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(60);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("PiProxyGuard/1.0");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("PiProxyGuard/1.1");
         });
 
         services.AddSingleton<IProxyLogParser, SquidAccessLogParser>();

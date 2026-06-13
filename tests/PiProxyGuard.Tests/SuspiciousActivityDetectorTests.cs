@@ -112,7 +112,7 @@ public class SuspiciousActivityDetectorTests : IDisposable
     }
 
     private SuspiciousActivityDetector CreateDetector() =>
-        new(_dbContext, Microsoft.Extensions.Options.Options.Create(Options),
+        new(new UnitOfWork(_dbContext), Microsoft.Extensions.Options.Options.Create(Options),
             NullLogger<SuspiciousActivityDetector>.Instance);
 
     private void AddEntries(
