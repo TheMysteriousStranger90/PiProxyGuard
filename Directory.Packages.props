@@ -12,6 +12,7 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="9.0.5"/>
     <PackageVersion Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.5"/>
     <PackageVersion Include="Microsoft.Extensions.Http" Version="9.0.5"/>
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="9.5.0"/>
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.5"/>
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="8.1.1"/>
     <PackageVersion Include="prometheus-net.AspNetCore" Version="8.2.1"/>

@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using PiProxyGuard.Api.Middleware;
+using System.Threading.RateLimiting;
 using PiProxyGuard.Infrastructure;
 using PiProxyGuard.Web;
 using PiProxyGuard.Infrastructure.Diagnostics;
 using PiProxyGuard.Infrastructure.Persistence;
+using PiProxyGuard.Infrastructure.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +20,36 @@ builder.Services.AddSystemd();
 // Blazor Server dashboard (hosted from the separate PiProxyGuard.Web library).
 builder.Services.AddPiProxyGuardWeb();
 
+// 1.4.0: optional hardening for the REST API, both off by default.
+var apiOptions = builder.Configuration.GetSection(ApiOptions.SectionName).Get<ApiOptions>()
+    ?? new ApiOptions();
+
+// Fixed-window rate limiter on /api/* (per client IP). Other paths (dashboard,
+// SignalR, /health, /metrics, /swagger) are never limited.
+if (apiOptions.RateLimitPerMinute > 0)
+{
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        {
+            if (!context.Request.Path.StartsWithSegments("/api"))
+            {
+                return RateLimitPartition.GetNoLimiter("unlimited");
+            }
+
+            var clientKey = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter(clientKey, _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = apiOptions.RateLimitPerMinute,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            });
+        });
+    });
+}
+
 var app = builder.Build();
 
 // Apply EF Core migrations on startup so API and Worker can start in any order.
@@ -25,6 +57,19 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     dbContext.Database.Migrate();
+}
+
+// Optional HTTPS: HSTS + HTTP->HTTPS redirect (requires an HTTPS endpoint/cert).
+if (apiOptions.UseHttpsRedirection)
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
+// Optional rate limiting (only registered when RateLimitPerMinute > 0).
+if (apiOptions.RateLimitPerMinute > 0)
+{
+    app.UseRateLimiter();
 }
 
 app.UseSwagger();

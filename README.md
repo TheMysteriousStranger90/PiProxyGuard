@@ -76,7 +76,11 @@ All persistence goes through the **Repository** and **Unit of Work** patterns in
 
 Swagger UI: `http://<pi>:5080/swagger`.
 
-Set `Api:ApiKey` in `appsettings.json` to require an `X-Api-Key` header on every request — recommended if you expose the API outside your LAN (better: keep it behind WireGuard).
+Hardening for `/api` (all optional, off by default — the dashboard stays open on a trusted LAN):
+
+- `Api:ApiKey` — require an `X-Api-Key` header on every `/api` request. Recommended if you expose the API outside your LAN (better still: keep it behind WireGuard).
+- `Api:RateLimitPerMinute` — when greater than 0, a fixed-window rate limiter caps each client IP to that many `/api` requests per minute; requests over the limit get `429 Too Many Requests`. The dashboard, SignalR hub, `/health`, `/metrics` and `/swagger` are never limited.
+- `Api:UseHttpsRedirection` — enable HSTS and redirect HTTP → HTTPS. Requires an HTTPS Kestrel endpoint/certificate to be configured (otherwise it logs a warning and does nothing).
 
 ## Configuration highlights (`appsettings.json`)
 
@@ -96,6 +100,11 @@ Set `Api:ApiKey` in `appsettings.json` to require an `X-Api-Key` header on every
 "Detection": {
   "IntervalMinutes": 5, "WindowMinutes": 5,
   "MaxRequestsPerWindow": 600, "MaxBytesPerWindow": 524288000, "MaxDeniedPerWindow": 20
+},
+"Api": {
+  "ApiKey": "",                 // empty = open on the LAN; set to require X-Api-Key
+  "RateLimitPerMinute": 0,      // > 0 enables a fixed-window 429 limiter on /api
+  "UseHttpsRedirection": false  // true = HSTS + HTTP->HTTPS (needs an HTTPS endpoint)
 }
 ```
 
