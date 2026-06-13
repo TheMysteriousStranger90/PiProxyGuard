@@ -18,6 +18,7 @@ WORKDIR /src
 COPY *.sln Directory.*.props Directory.*.targets nuget.config ./
 COPY src/PiProxyGuard.Domain/*.csproj src/PiProxyGuard.Domain/
 COPY src/PiProxyGuard.Infrastructure/*.csproj src/PiProxyGuard.Infrastructure/
+COPY src/PiProxyGuard.Web/*.csproj src/PiProxyGuard.Web/
 COPY src/PiProxyGuard.Api/*.csproj src/PiProxyGuard.Api/
 COPY src/PiProxyGuard.Worker/*.csproj src/PiProxyGuard.Worker/
 COPY tests/PiProxyGuard.Tests/*.csproj tests/PiProxyGuard.Tests/
@@ -36,7 +37,7 @@ EXPOSE 5080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD ["sh", "-c", "wget -qO- http://127.0.0.1:5080/health || exit 1"]
 
-ARG VERSION=1.2.0
+ARG VERSION=1.3.0
 LABEL org.opencontainers.image.title="PiProxyGuard API" \
       org.opencontainers.image.description="Home proxy statistics and protection for a Raspberry Pi (.NET 9)." \
       org.opencontainers.image.version="${VERSION}" \
