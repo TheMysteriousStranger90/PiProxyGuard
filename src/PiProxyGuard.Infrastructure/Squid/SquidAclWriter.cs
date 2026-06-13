@@ -8,8 +8,11 @@ using PiProxyGuard.Infrastructure.Options;
 namespace PiProxyGuard.Infrastructure.Squid;
 
 /// <summary>
-/// Writes the aggregated blocklist as a Squid dstdomain ACL file and
-/// triggers "squid -k reconfigure" when the content actually changed.
+/// Writes the aggregated blocklist as a Squid dstdomain ACL file and triggers
+/// "squid -k reconfigure" when the content actually changed. To keep the proxy
+/// resilient, a ".bak" copy of the previous ACL is taken before each rewrite;
+/// if the reload command fails the previous file is restored automatically so a
+/// malformed blocklist can never take the proxy down.
 /// </summary>
 public class SquidAclWriter
 {
@@ -24,6 +27,9 @@ public class SquidAclWriter
 
     /// <summary>
     /// Returns true when the file was rewritten (and the reload command executed).
+    /// On a failed reload the previous ACL is restored and the method still
+    /// returns true (a change was attempted), but <see cref="LastReloadSucceeded"/>
+    /// reflects whether the new content is actually live.
     /// </summary>
     public async Task<bool> WriteIfChangedAsync(IReadOnlyList<string> domains, CancellationToken cancellationToken)
     {
@@ -37,8 +43,9 @@ public class SquidAclWriter
 
         var newContent = builder.ToString();
         var path = _options.AclFilePath;
+        var fileExisted = File.Exists(path);
 
-        if (File.Exists(path))
+        if (fileExisted)
         {
             var existing = await File.ReadAllTextAsync(path, cancellationToken);
             if (HashOf(existing) == HashOf(newContent))
@@ -49,6 +56,14 @@ public class SquidAclWriter
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
 
+        // Keep a backup of the currently-live ACL so we can roll back on failure.
+        string? backupPath = null;
+        if (_options.BackupAclBeforeWrite && fileExisted)
+        {
+            backupPath = path + ".bak";
+            File.Copy(path, backupPath, overwrite: true);
+        }
+
         // Write atomically: temp file + rename, so Squid never reads a half-written ACL.
         var tempPath = path + ".tmp";
         await File.WriteAllTextAsync(tempPath, newContent, cancellationToken);
@@ -56,15 +71,31 @@ public class SquidAclWriter
 
         _logger.LogInformation("ACL file {Path} rewritten with {Count} domains", path, domains.Count);
 
-        await RunReloadCommandAsync(cancellationToken);
+        LastReloadSucceeded = await RunReloadCommandAsync(cancellationToken);
+
+        if (!LastReloadSucceeded && backupPath is not null && File.Exists(backupPath))
+        {
+            // Reload failed — restore the previous ACL so the proxy keeps serving.
+            File.Copy(backupPath, path, overwrite: true);
+            _logger.LogWarning("Reload failed; rolled back ACL file {Path} to the previous version", path);
+            await RunReloadCommandAsync(cancellationToken);
+        }
+
         return true;
     }
 
-    private async Task RunReloadCommandAsync(CancellationToken cancellationToken)
+    /// <summary>Whether the last reload command succeeded (true when no command configured).</summary>
+    public bool LastReloadSucceeded { get; private set; } = true;
+
+    /// <summary>
+    /// Runs the configured reload command. Returns true on success (or when no
+    /// command is configured). Overridable so tests can simulate reload failure.
+    /// </summary>
+    protected virtual async Task<bool> RunReloadCommandAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_options.ReloadCommand))
         {
-            return;
+            return true;
         }
 
         try
@@ -80,7 +111,7 @@ public class SquidAclWriter
             if (process is null)
             {
                 _logger.LogWarning("Reload command could not be started");
-                return;
+                return false;
             }
 
             await process.WaitForExitAsync(cancellationToken);
@@ -88,16 +119,17 @@ public class SquidAclWriter
             if (process.ExitCode == 0)
             {
                 _logger.LogInformation("Proxy reloaded via '{Command}'", _options.ReloadCommand);
+                return true;
             }
-            else
-            {
-                var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
-                _logger.LogWarning("Reload command exited with {Code}: {Error}", process.ExitCode, stderr.Trim());
-            }
+
+            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+            _logger.LogWarning("Reload command exited with {Code}: {Error}", process.ExitCode, stderr.Trim());
+            return false;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Failed to run reload command '{Command}'", _options.ReloadCommand);
+            return false;
         }
     }
 

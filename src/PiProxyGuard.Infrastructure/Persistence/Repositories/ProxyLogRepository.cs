@@ -223,4 +223,21 @@ public class ProxyLogRepository : Repository<ProxyLogEntry>, IProxyLogRepository
 
     public async Task<int> DeleteOlderThanAsync(DateTime cutoffUtc, CancellationToken cancellationToken = default) =>
         await Set.Where(e => e.TimestampUtc < cutoffUtc).ExecuteDeleteAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<ClientHostContacts>> GetClientHostContactsAsync(
+        DateTime fromUtc, DateTime toUtc, CancellationToken cancellationToken = default)
+    {
+        var rows = await InRange(fromUtc, toUtc)
+            .Where(e => e.Host != "")
+            .GroupBy(e => new { e.ClientIp, e.Host })
+            .Select(g => new { g.Key.ClientIp, g.Key.Host, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(r => r.ClientIp)
+            .Select(g => new ClientHostContacts(
+                g.Key,
+                g.Select(x => new HostHit(x.Host, x.Count)).ToList()))
+            .ToList();
+    }
 }

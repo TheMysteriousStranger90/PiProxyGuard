@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.git/
+**/.github/
+*.user
+*.db
+*.db-*
+docker-compose*.yml
+Dockerfile*
+README.md
+CHANGELOG.md
+LICENSE

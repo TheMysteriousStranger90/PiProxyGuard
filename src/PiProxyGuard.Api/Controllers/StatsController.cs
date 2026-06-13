@@ -10,8 +10,13 @@ namespace PiProxyGuard.Api.Controllers;
 public class StatsController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IDomainCategorizer _categorizer;
 
-    public StatsController(IUnitOfWork unitOfWork) => _unitOfWork = unitOfWork;
+    public StatsController(IUnitOfWork unitOfWork, IDomainCategorizer categorizer)
+    {
+        _unitOfWork = unitOfWork;
+        _categorizer = categorizer;
+    }
 
     /// <summary>Overall traffic summary for a period (defaults to the last 24 hours).</summary>
     [HttpGet("summary")]
@@ -140,6 +145,26 @@ public class StatsController : ControllerBase
         return states
             .Select(s => new IngestionStatusDto(
                 s.FilePath, s.Offset, !string.IsNullOrEmpty(s.FirstLineFingerprint), s.UpdatedAtUtc))
+            .ToList();
+    }
+
+    /// <summary>Traffic grouped by domain category (ads, tracking, social, streaming, CDN, malware).</summary>
+    [HttpGet("categories")]
+    public async Task<ActionResult<List<CategoryTrafficDto>>> GetCategories(
+        [FromQuery] DateTime? fromUtc, [FromQuery] DateTime? toUtc,
+        [FromQuery] int sampleHosts = 500, CancellationToken cancellationToken = default)
+    {
+        var (from, to) = NormalizeRange(fromUtc, toUtc);
+        sampleHosts = Math.Clamp(sampleHosts, 1, 2000);
+
+        var hosts = await _unitOfWork.ProxyLogs.GetTopHostsAsync(from, to, sampleHosts, cancellationToken);
+        return hosts
+            .GroupBy(h => _categorizer.Categorize(h.Host))
+            .Select(g => new CategoryTrafficDto(
+                g.Key.ToString(),
+                g.Sum(x => x.Requests),
+                g.Sum(x => x.Bytes)))
+            .OrderByDescending(c => c.Requests)
             .ToList();
     }
 

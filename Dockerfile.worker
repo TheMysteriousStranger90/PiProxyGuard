@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+# ---------------------------------------------------------------------------
+# PiProxyGuard Worker — multi-arch image (linux/amd64 + linux/arm64).
+# See Dockerfile.api for the cross-build rationale ($BUILDPLATFORM SDK +
+# framework-dependent publish + $TARGETPLATFORM runtime).
+#
+#   docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.worker .
+# ---------------------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+
+COPY *.sln Directory.*.props Directory.*.targets nuget.config ./
+COPY src/PiProxyGuard.Domain/*.csproj src/PiProxyGuard.Domain/
+COPY src/PiProxyGuard.Infrastructure/*.csproj src/PiProxyGuard.Infrastructure/
+COPY src/PiProxyGuard.Api/*.csproj src/PiProxyGuard.Api/
+COPY src/PiProxyGuard.Worker/*.csproj src/PiProxyGuard.Worker/
+COPY tests/PiProxyGuard.Tests/*.csproj tests/PiProxyGuard.Tests/
+RUN dotnet restore src/PiProxyGuard.Worker/PiProxyGuard.Worker.csproj
+
+COPY . .
+RUN dotnet publish src/PiProxyGuard.Worker/PiProxyGuard.Worker.csproj \
+    -c Release -o /app --no-restore /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/runtime:9.0 AS runtime
+WORKDIR /app
+ENV DOTNET_NOLOGO=1
+COPY --from=build /app ./
+
+ARG VERSION=1.2.0
+LABEL org.opencontainers.image.title="PiProxyGuard Worker" \
+      org.opencontainers.image.description="Log ingestion + blocklist updater + suspicious-activity detector (.NET 9)." \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.licenses="MIT"
+
+ENTRYPOINT ["dotnet", "PiProxyGuard.Worker.dll"]

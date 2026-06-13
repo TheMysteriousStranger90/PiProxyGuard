@@ -44,9 +44,9 @@ public record IngestionStatusDto(
 // Blocklist
 // ---------------------------------------------------------------------------
 
-public record AddBlockedDomainRequest(string Domain, string? Reason);
+public record AddBlockedDomainRequest(string Domain, string? Reason, int? ExpiresInHours);
 
-public record BlockedDomainDto(long Id, string Domain, string Source, string? Reason, DateTime CreatedAtUtc, bool IsActive);
+public record BlockedDomainDto(long Id, string Domain, string Source, string? Reason, DateTime CreatedAtUtc, bool IsActive, DateTime? ExpiresAtUtc);
 
 // ---------------------------------------------------------------------------
 // Alerts
@@ -61,3 +61,37 @@ public record AlertDto(
     DateTime WindowEndUtc,
     DateTime DetectedAtUtc,
     bool IsAcknowledged);
+
+// ---------------------------------------------------------------------------
+// Allowlist (1.2.0)
+// ---------------------------------------------------------------------------
+
+public record AddAllowedDomainRequest(string Domain, string? Reason);
+
+public record AllowedDomainDto(long Id, string Domain, string? Reason, DateTime CreatedAtUtc);
+
+// ---------------------------------------------------------------------------
+// Categories, threat-intel, diagnostics, digest, backup (1.2.0)
+// ---------------------------------------------------------------------------
+
+public record CategoryTrafficDto(string Category, long Requests, long Bytes);
+
+public record ThreatVerdictDto(string Domain, bool IsMalicious, string Source, string? Details);
+
+public record DiagnosticCheckDto(string Name, string Status, string Detail);
+
+public record DiagnosticsReportDto(string Status, bool Healthy, DateTime GeneratedAtUtc, List<DiagnosticCheckDto> Checks);
+
+public record DigestReportDto(string Title, DateTime FromUtc, DateTime ToUtc, DateTime GeneratedAtUtc, string Text);
+
+public record BackupDto(
+    string Version,
+    DateTime ExportedAtUtc,
+    List<BackupBlockedDomainDto> BlockedDomains,
+    List<BackupAllowedDomainDto> AllowedDomains);
+
+public record BackupBlockedDomainDto(string Domain, string Source, string? Reason, bool IsActive, DateTime? ExpiresAtUtc);
+
+public record BackupAllowedDomainDto(string Domain, string? Reason);
+
+public record RestoreResultDto(int BlockedImported, int AllowedImported, int Skipped);

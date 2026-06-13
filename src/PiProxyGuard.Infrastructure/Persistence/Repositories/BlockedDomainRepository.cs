@@ -51,4 +51,9 @@ public class BlockedDomainRepository : Repository<BlockedDomain>, IBlockedDomain
         await Set.Where(d => d.Source != BlockSource.Feed)
             .Select(d => d.Domain)
             .ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<BlockedDomain>> GetExpiredAutoBlocksAsync(
+        DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        await Set
+            .Where(d => d.Source == BlockSource.Auto && d.ExpiresAtUtc != null && d.ExpiresAtUtc <= nowUtc)
+            .ToListAsync(cancellationToken);
 }

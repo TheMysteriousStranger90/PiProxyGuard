@@ -68,3 +68,15 @@ public sealed record ClientWindowStat(string ClientIp, int Requests, long Bytes,
 
 /// <summary>A client that contacted a blocklisted domain within a window.</summary>
 public sealed record BlockedDomainContact(string ClientIp, string Domain, int Count);
+
+/// <summary>
+/// Distinct hosts a client contacted in a window, with their per-host request
+/// counts. Used by content-aware detectors (DGA / suspicious-domain).
+/// </summary>
+public sealed record ClientHostContacts(string ClientIp, IReadOnlyList<HostHit> Hosts);
+
+/// <summary>One host together with how many times a client hit it.</summary>
+public sealed record HostHit(string Host, int Count);
+
+/// <summary>Requests/bytes aggregated by traffic category.</summary>
+public sealed record CategoryTraffic(string Category, long Requests, long Bytes);

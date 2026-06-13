@@ -57,4 +57,10 @@ public interface IProxyLogRepository : IRepository<ProxyLogEntry>
 
     /// <summary>Bulk-deletes entries older than the cutoff. Returns rows removed.</summary>
     Task<int> DeleteOlderThanAsync(DateTime cutoffUtc, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Distinct hosts each client contacted in the window with per-host counts.
+    /// Feeds content-aware detectors (DGA / suspicious-domain).
+    /// </summary>
+    Task<IReadOnlyList<ClientHostContacts>> GetClientHostContactsAsync(
+        DateTime fromUtc, DateTime toUtc, CancellationToken cancellationToken = default);
 }

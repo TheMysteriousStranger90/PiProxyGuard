@@ -24,4 +24,12 @@ public class BlockedDomain
 
     /// <summary>Manual/auto entries can be disabled without deleting them.</summary>
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Optional expiry. Used by automatic blocks (<see cref="BlockSource.Auto"/>):
+    /// when set and in the past, the auto-block sweep deactivates/removes the
+    /// entry so a temporarily misbehaving device is not blocked forever.
+    /// Null means the block never expires (manual and feed entries).
+    /// </summary>
+    public DateTime? ExpiresAtUtc { get; set; }
 }

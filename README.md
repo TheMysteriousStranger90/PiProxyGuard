@@ -7,7 +7,8 @@ Squid (or any proxy writing the Squid native log format) does the proxying; PiPr
 - **Worker Service** tails `access.log`, parses every request and stores it in **SQLite** via **EF Core**
 - **Web API** serves traffic statistics: totals, top sites, top devices, hourly timeline, status codes
 - **Blocklist updater** downloads fresh blocklists (hosts files or HTML pages parsed with **AngleSharp**) on a schedule, merges them with your manual entries and rewrites the Squid ACL file, then runs `squid -k reconfigure`
-- **Suspicious-activity detector** raises alerts for request floods, traffic spikes, repeated denied requests and contacts with blocklisted domains
+- **Suspicious-activity detector** raises alerts for request floods, traffic spikes (vs. each device’s own baseline), repeated denied requests, contacts with blocklisted domains and algorithmically-generated (DGA) hostnames — with optional auto-blocking (TTL) and per-device thresholds
+- **Allowlist** that always overrides the blocklist, **notifications** (Telegram / e-mail), **threat-intel** lookups (free URLhaus), **domain categorization**, **self-diagnostics**, **backup/restore**, **digest reports** and **Prometheus** metrics
 
 ## Architecture
 
@@ -61,10 +62,17 @@ All persistence goes through the **Repository** and **Unit of Work** patterns in
 | `GET /api/alerts?onlyUnacknowledged=true` | Suspicious-activity alerts |
 | `POST /api/alerts/{id}/acknowledge` | Close an alert |
 | `GET /api/blocklist?source=Manual&search=ads` | Browse the blocklist |
-| `POST /api/blocklist` `{ "domain": "ads.example.com", "reason": "..." }` | Block a domain (ACL rewritten immediately) |
+| `POST /api/blocklist` `{ "domain": "ads.example.com", "reason": "...", "expiresInHours": 24 }` | Block a domain (ACL rewritten immediately); optional TTL |
 | `DELETE /api/blocklist/{id}` | Unblock |
 | `POST /api/blocklist/refresh` | Re-download all feeds now |
-| `GET /health` | Liveness probe |
+| `GET/POST/DELETE /api/allowlist` | Manage the allowlist — domains that must never be blocked (overrides the blocklist) |
+| `GET /api/stats/categories` | Traffic grouped by category (ads, tracking, social, streaming, CDN, malware) |
+| `GET /api/threat-intel/check?domain=` | Look a domain up against threat intel (free URLhaus) |
+| `GET /api/diagnostics` | Self-diagnostics (db, ingestion, blocklist, ACL); 503 when unhealthy |
+| `GET /api/reports/digest?period=day\|week\|month` | Human-readable traffic + security digest |
+| `GET /api/backup/export` · `POST /api/backup/import` | Export / restore manual rules + allowlist as JSON |
+| `GET /metrics` | Prometheus metrics (no API key required) |
+| `GET /health` · `GET /health/ready` | Liveness / readiness probes |
 
 Swagger UI: `http://<pi>:5080/swagger`.
 
@@ -90,6 +98,28 @@ Set `Api:ApiKey` in `appsettings.json` to require an `X-Api-Key` header on every
   "MaxRequestsPerWindow": 600, "MaxBytesPerWindow": 524288000, "MaxDeniedPerWindow": 20
 }
 ```
+
+## Running with Docker
+
+A `docker-compose.yml` brings up Squid, the Worker and the API with shared
+volumes (database + Squid config/logs):
+
+```bash
+docker compose up -d --build
+# API + Swagger + /metrics on :5080, proxy on :3128
+```
+
+Images build for both `linux/amd64` and `linux/arm64` (Raspberry Pi). To build
+a single image directly:
+
+```bash
+docker build -f Dockerfile.api    -t piproxyguard-api    .
+docker build -f Dockerfile.worker -t piproxyguard-worker .
+```
+
+Configuration is via environment variables using the standard double-underscore
+convention, e.g. `Detection__AutoBlockSuspiciousHosts=true`,
+`Notifications__Telegram__BotToken=...`, `Api__ApiKey=...`.
 
 ## Deploying to the Raspberry Pi
 

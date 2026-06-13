@@ -1,0 +1,77 @@
+# ---------------------------------------------------------------------------
+# PiProxyGuard full stack: Squid proxy + Worker + Web API.
+#
+#   docker compose up -d --build
+#
+# The three services share two named volumes:
+#   • piproxyguard-data  — the SQLite database (written by worker, read by api)
+#   • squid-config       — squid.conf + the generated blocked_domains.acl
+# and the proxy access log, so the worker can tail what Squid writes.
+# ---------------------------------------------------------------------------
+services:
+  squid:
+    image: ubuntu/squid:latest
+    container_name: piproxyguard-squid
+    restart: unless-stopped
+    ports:
+      - "3128:3128"          # proxy port for your devices
+    volumes:
+      - squid-config:/etc/squid
+      - squid-logs:/var/log/squid
+    healthcheck:
+      test: ["CMD", "sh", "-c", "squid -k check || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    # Pull the published multi-arch image, or build locally (either works on
+    # amd64 and arm64/Raspberry Pi). Override the registry with PIPROXYGUARD_IMAGE.
+    image: ${PIPROXYGUARD_WORKER_IMAGE:-piproxyguard-worker:1.2.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: piproxyguard-worker
+    restart: unless-stopped
+    depends_on:
+      - squid
+    environment:
+      ConnectionStrings__Default: "Data Source=/data/piproxyguard.db;Cache=Shared"
+      AccessLog__Path: "/var/log/squid/access.log"
+      Blocklist__AclFilePath: "/etc/squid/blocked_domains.acl"
+      # Reload Squid in the sibling container via a shared signal file is not
+      # portable; instead keep the command empty and let Squid pick up ACL
+      # changes on its own reconfigure schedule, or wire an external reloader.
+      Blocklist__ReloadCommand: ""
+      Detection__AutoBlockSuspiciousHosts: "false"
+    volumes:
+      - piproxyguard-data:/data
+      - squid-config:/etc/squid
+      - squid-logs:/var/log/squid
+
+  api:
+    image: ${PIPROXYGUARD_API_IMAGE:-piproxyguard-api:1.2.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: piproxyguard-api
+    restart: unless-stopped
+    depends_on:
+      - worker
+    ports:
+      - "5080:5080"          # REST API + Swagger + /metrics
+    environment:
+      ConnectionStrings__Default: "Data Source=/data/piproxyguard.db;Cache=Shared"
+      Blocklist__AclFilePath: "/etc/squid/blocked_domains.acl"
+      Blocklist__ReloadCommand: ""
+      # Set an API key to require X-Api-Key on every request (recommended off-LAN).
+      Api__ApiKey: ""
+    volumes:
+      - piproxyguard-data:/data
+      - squid-config:/etc/squid
+      - squid-logs:/var/log/squid
+
+volumes:
+  piproxyguard-data:
+  squid-config:
+  squid-logs:

@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using PiProxyGuard.Domain.Abstractions;
 using PiProxyGuard.Domain.Entities;
 using PiProxyGuard.Domain.Enums;
 using PiProxyGuard.Infrastructure.Detection;
@@ -113,6 +114,7 @@ public class SuspiciousActivityDetectorTests : IDisposable
 
     private SuspiciousActivityDetector CreateDetector() =>
         new(new UnitOfWork(_dbContext), Microsoft.Extensions.Options.Options.Create(Options),
+            new ClientProfileResolver(Options), new NoopNotificationDispatcher(),
             NullLogger<SuspiciousActivityDetector>.Instance);
 
     private void AddEntries(
