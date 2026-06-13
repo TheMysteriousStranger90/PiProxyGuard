@@ -1,0 +1,78 @@
+#!/bin/sh
+# PiProxyGuard postinst: provisions Squid + service user and starts everything.
+set -e
+
+APP_USER=piproxyguard
+INSTALL_DIR=/opt/piproxyguard
+DATA_DIR=/var/lib/piproxyguard
+SQUID_CONF=/etc/squid/squid.conf
+ACL_FILE=/etc/squid/blocked_domains.acl
+SQUID_LOG=/var/log/squid/access.log
+SAMPLE=/usr/share/piproxyguard/squid.conf.sample
+
+case "$1" in
+  configure)
+    # --- service user ---
+    if ! getent passwd "$APP_USER" >/dev/null 2>&1; then
+        adduser --system --group --no-create-home --shell /usr/sbin/nologin "$APP_USER" \
+            >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin "$APP_USER"
+    fi
+    if getent group proxy >/dev/null 2>&1; then
+        adduser "$APP_USER" proxy >/dev/null 2>&1 || usermod -aG proxy "$APP_USER" 2>/dev/null || true
+    fi
+
+    # --- dirs + acl ---
+    mkdir -p "$DATA_DIR" "$(dirname "$SQUID_LOG")"
+    [ -f "$ACL_FILE" ] || : > "$ACL_FILE"
+    chmod 644 "$ACL_FILE"
+    chown -R "$APP_USER":"$APP_USER" "$DATA_DIR" "$INSTALL_DIR" 2>/dev/null || true
+    chown "$APP_USER":"$APP_USER" "$ACL_FILE" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/api/PiProxyGuard.Api" "$INSTALL_DIR/worker/PiProxyGuard.Worker" 2>/dev/null || true
+
+    SQUID_BIN="$(command -v squid 2>/dev/null || echo /usr/sbin/squid)"
+
+    # --- squid.conf (don't clobber a config already set up for us) ---
+    if [ -f "$SQUID_CONF" ] && grep -q "blocked_domains.acl" "$SQUID_CONF" 2>/dev/null; then
+        :
+    else
+        if [ -f "$SQUID_CONF" ]; then
+            cp -a "$SQUID_CONF" "${SQUID_CONF}.bak.$(date +%Y%m%d%H%M%S)" || true
+        fi
+        [ -f "$SAMPLE" ] && cp "$SAMPLE" "$SQUID_CONF"
+    fi
+
+    # --- let the worker reload squid without a password ---
+    echo "$APP_USER ALL=(root) NOPASSWD: $SQUID_BIN -k reconfigure" > /etc/sudoers.d/piproxyguard
+    chmod 440 /etc/sudoers.d/piproxyguard
+
+    # --- point the worker config at the sudo reload + correct paths ---
+    WORKER_CFG="$INSTALL_DIR/worker/appsettings.json"
+    if [ -f "$WORKER_CFG" ] && command -v jq >/dev/null 2>&1; then
+        tmp="$(mktemp)"
+        if jq --arg rc "sudo $SQUID_BIN -k reconfigure" \
+              '.Blocklist.ReloadCommand=$rc
+               | .AccessLog.Path="/var/log/squid/access.log"
+               | .ConnectionStrings.Default="Data Source=/var/lib/piproxyguard/piproxyguard.db"' \
+              "$WORKER_CFG" > "$tmp" 2>/dev/null; then
+            mv "$tmp" "$WORKER_CFG"
+            chown "$APP_USER":"$APP_USER" "$WORKER_CFG" 2>/dev/null || true
+        else
+            rm -f "$tmp"
+        fi
+    fi
+
+    # --- systemd ---
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || true
+        systemctl enable squid >/dev/null 2>&1 || true
+        systemctl restart squid || true
+        systemctl enable --now piproxyguard-worker.service piproxyguard-api.service || true
+    fi
+
+    IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    [ -n "$IP" ] || IP="<pi-ip>"
+    echo "PiProxyGuard installed. Dashboard: http://$IP:5080/   Proxy: $IP:3128"
+    ;;
+esac
+
+exit 0

@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+case "$1" in
+  remove)
+    rm -f /etc/sudoers.d/piproxyguard
+    if [ -d /run/systemd/system ]; then
+        systemctl disable piproxyguard-api.service piproxyguard-worker.service 2>/dev/null || true
+        systemctl daemon-reload 2>/dev/null || true
+    fi
+    ;;
+  purge)
+    rm -f /etc/sudoers.d/piproxyguard
+    rm -rf /opt/piproxyguard
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload 2>/dev/null || true
+    fi
+    echo "PiProxyGuard purged. Database kept at /var/lib/piproxyguard (remove manually if desired)."
+    echo "Squid and /etc/squid/squid.conf were left untouched."
+    ;;
+esac
+exit 0

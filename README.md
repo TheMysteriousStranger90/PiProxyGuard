@@ -123,6 +123,31 @@ convention, e.g. `Detection__AutoBlockSuspiciousHosts=true`,
 
 ## Deploying to the Raspberry Pi
 
+### Install via .deb package (recommended — fully automatic)
+
+Download the `piproxyguard_X.Y.Z_arm64.deb` asset from the [Releases](../../releases) page onto the Pi and install it with apt:
+
+```bash
+sudo apt install ./piproxyguard_*_arm64.deb
+```
+
+apt pulls in Squid automatically, and the package's post-install script writes the Squid config, creates the `piproxyguard` service user, installs the systemd units and starts the API + Worker for you. Nothing else to run. Open `http://<pi>:5080/` and point your devices at `<pi>:3128`. Remove with `sudo apt remove piproxyguard` (purge with `sudo apt purge piproxyguard`).
+
+### Quick install from the tarball (script)
+
+Grab the `PiProxyGuard-vX.Y.Z-linux-arm64.tar.gz` asset from the [Releases](../../releases) page **onto the Pi**, then run the bundled installer:
+
+```bash
+tar -xzf PiProxyGuard-*-linux-arm64.tar.gz
+sudo bash deploy/install.sh
+```
+
+That single command installs Squid, writes a working `squid.conf`, creates the `piproxyguard` service user + data dir, copies the binaries to `/opt/piproxyguard`, wires up the sudoers rule so the Worker can reload Squid, installs the systemd units and starts everything. No .NET runtime is needed (the binaries are self-contained). When it finishes it prints the dashboard URL.
+
+Open `http://<pi>:5080/` and point your devices' HTTP/HTTPS proxy at `<pi>:3128`. Remove everything again with `sudo bash deploy/uninstall.sh`.
+
+### Manual install (or building from source)
+
 1. **Install Squid** on the Pi and merge `deploy/squid.conf.sample` into `/etc/squid/squid.conf` (it adds the `dstdomain` ACL pointing at the generated blocklist).
 
 2. **Publish** on your dev machine (no .NET runtime needed on the Pi — builds are self-contained):

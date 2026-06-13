@@ -1,0 +1,15 @@
+Package: piproxyguard
+Version: __VERSION__
+Architecture: __ARCH__
+Maintainer: TheMysteriousStranger90 <noreply@users.noreply.github.com>
+Depends: squid, jq, adduser, sudo
+Section: net
+Priority: optional
+Homepage: https://github.com/TheMysteriousStranger90/PiProxyGuard
+Description: Squid proxy traffic statistics and protection for Raspberry Pi
+ PiProxyGuard ingests Squid access logs into SQLite, serves a Blazor dashboard
+ and REST API on port 5080, maintains a domain blocklist and detects anomalies.
+ .
+ Installing this package pulls in Squid, writes a working squid.conf, creates
+ the service user and starts the API and Worker systemd services automatically.
+ The binaries are self-contained, so no .NET runtime is required.

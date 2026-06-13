@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Debian package (`.deb`)** — `sudo apt install ./piproxyguard_X.Y.Z_arm64.deb` installs Squid automatically (via `Depends`) and runs a `postinst` that provisions the service user, Squid config, sudoers and systemd services, then starts them. Built by `deploy/build-deb.sh` and attached to every GitHub Release via `release.yml`.
+- **One-command installer** `deploy/install.sh` for the prebuilt `linux-arm64` release: installs Squid, writes `squid.conf`, creates the `piproxyguard` user + data dir, copies the binaries to `/opt/piproxyguard`, adds the sudoers reload rule, installs the systemd units and starts everything (idempotent). Plus `deploy/uninstall.sh` to reverse it.
+
 ## 1.3.0 — Dashboard
 
 A UI release. Everything the REST API exposes is now available in a built-in
