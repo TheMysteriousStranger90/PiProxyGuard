@@ -8,7 +8,7 @@ Squid (or any proxy writing the Squid native log format) does the proxying; PiPr
 - **Web API** serves traffic statistics: totals, top sites, top devices, hourly timeline, status codes
 - **Blocklist updater** downloads fresh blocklists (hosts files or HTML pages parsed with **AngleSharp**) on a schedule, merges them with your manual entries and rewrites the Squid ACL file, then runs `squid -k reconfigure`
 - **Suspicious-activity detector** raises alerts for request floods, traffic spikes (vs. each device’s own baseline), repeated denied requests, contacts with blocklisted domains and algorithmically-generated (DGA) hostnames — with optional auto-blocking (TTL) and per-device thresholds
-- **Allowlist** that always overrides the blocklist, **notifications** (Telegram / e-mail), **threat-intel** lookups (free URLhaus), **domain categorization**, **self-diagnostics**, **backup/restore**, **digest reports** and **Prometheus** metrics
+- **Allowlist** that always overrides the blocklist, **notifications** (Telegram / e-mail, configurable from the dashboard), **threat-intel** lookups (free URLhaus), **domain categorization**, **self-diagnostics**, **backup/restore**, **digest reports** and **Prometheus** metrics
 
 ## Architecture
 
@@ -71,10 +71,12 @@ All persistence goes through the **Repository** and **Unit of Work** patterns in
 | `GET /api/diagnostics` | Self-diagnostics (db, ingestion, blocklist, ACL); 503 when unhealthy |
 | `GET /api/reports/digest?period=day\|week\|month` | Human-readable traffic + security digest |
 | `GET /api/backup/export` · `POST /api/backup/import` | Export / restore manual rules + allowlist as JSON |
+| `GET/PUT /api/notifications/settings` | Read / update the Telegram + e-mail notification settings (secrets are write-only — never returned) |
+| `POST /api/notifications/test` `{ "channel": "Telegram" }` | Send a test message through one channel (`Telegram` or `Email`) |
 | `GET /metrics` | Prometheus metrics (no API key required) |
 | `GET /health` · `GET /health/ready` | Liveness / readiness probes |
 
-Swagger UI: `http://<pi>:5080/swagger`.
+Swagger UI: `http://<pi>:5080/swagger`. The same notification settings can be edited from the dashboard **Settings** page at `http://<pi>:5080/settings`.
 
 Hardening for `/api` (all optional, off by default — the dashboard stays open on a trusted LAN):
 
@@ -107,6 +109,14 @@ Hardening for `/api` (all optional, off by default — the dashboard stays open 
   "UseHttpsRedirection": false  // true = HSTS + HTTP->HTTPS (needs an HTTPS endpoint)
 }
 ```
+
+**Notifications.** Telegram and e-mail (SMTP) alerts are configured at runtime from the
+dashboard **Settings** page (`/settings`) and stored in the database, so any change takes
+effect within seconds — no `appsettings` edit, no restart — on every install (Docker,
+`.deb`, tarball). The `Notifications` section of `appsettings`/environment is still honoured
+as a fallback when nothing has been saved yet. The same settings are available over REST at
+`GET`/`PUT /api/notifications/settings` and `POST /api/notifications/test`; secrets (the bot
+token and the SMTP password) are write-only and never returned.
 
 ## Running with Docker
 
@@ -195,7 +205,7 @@ Open `http://<pi>:5080/` and point your devices' HTTP/HTTPS proxy at `<pi>:3128`
 ## Running locally (development)
 
 ```bash
-dotnet test                                       # 40 unit tests
+dotnet test                                       # 81 unit tests
 cd src/PiProxyGuard.Worker && dotnet run          # uses sample-logs/access.log, local sqlite + acl file
 cd src/PiProxyGuard.Api    && dotnet run          # http://localhost:5080/swagger
 ```

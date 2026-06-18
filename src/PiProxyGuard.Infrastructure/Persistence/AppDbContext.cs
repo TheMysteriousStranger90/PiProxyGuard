@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<AllowedDomain> AllowedDomains => Set<AllowedDomain>();
     public DbSet<SuspiciousActivityAlert> Alerts => Set<SuspiciousActivityAlert>();
     public DbSet<LogIngestionState> IngestionStates => Set<LogIngestionState>();
+    public DbSet<NotificationSetting> NotificationSettings => Set<NotificationSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -56,6 +57,17 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<LogIngestionState>(builder =>
         {
             builder.Property(e => e.FilePath).HasMaxLength(1024);
+        });
+
+        modelBuilder.Entity<NotificationSetting>(builder =>
+        {
+            builder.Property(e => e.TelegramBotToken).HasMaxLength(200);
+            builder.Property(e => e.TelegramChatId).HasMaxLength(64);
+            builder.Property(e => e.EmailHost).HasMaxLength(253);
+            builder.Property(e => e.EmailUsername).HasMaxLength(320);
+            builder.Property(e => e.EmailPassword).HasMaxLength(512);
+            builder.Property(e => e.EmailFrom).HasMaxLength(320);
+            builder.Property(e => e.EmailTo).HasMaxLength(1024);
         });
     }
 }

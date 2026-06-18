@@ -27,19 +27,24 @@ public sealed class DashboardService
     public Task<TrafficSummary> GetSummaryAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct = default) =>
         WithUnitOfWork(uow => uow.ProxyLogs.GetTrafficSummaryAsync(fromUtc, toUtc, ct));
 
-    public Task<IReadOnlyList<HostTraffic>> GetTopHostsAsync(DateTime fromUtc, DateTime toUtc, int count, CancellationToken ct = default) =>
+    public Task<IReadOnlyList<HostTraffic>> GetTopHostsAsync(DateTime fromUtc, DateTime toUtc, int count,
+        CancellationToken ct = default) =>
         WithUnitOfWork(uow => uow.ProxyLogs.GetTopHostsAsync(fromUtc, toUtc, count, ct));
 
-    public Task<IReadOnlyList<ClientTraffic>> GetTopClientsAsync(DateTime fromUtc, DateTime toUtc, int count, CancellationToken ct = default) =>
+    public Task<IReadOnlyList<ClientTraffic>> GetTopClientsAsync(DateTime fromUtc, DateTime toUtc, int count,
+        CancellationToken ct = default) =>
         WithUnitOfWork(uow => uow.ProxyLogs.GetTopClientsAsync(fromUtc, toUtc, count, ct));
 
-    public Task<IReadOnlyList<TimelineBucket>> GetTimelineAsync(DateTime fromUtc, DateTime toUtc, TimelineInterval interval, CancellationToken ct = default) =>
+    public Task<IReadOnlyList<TimelineBucket>> GetTimelineAsync(DateTime fromUtc, DateTime toUtc,
+        TimelineInterval interval, CancellationToken ct = default) =>
         WithUnitOfWork(uow => uow.ProxyLogs.GetTimelineAsync(fromUtc, toUtc, interval, ct));
 
-    public Task<IReadOnlyList<StatusCodeCount>> GetStatusCodesAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct = default) =>
+    public Task<IReadOnlyList<StatusCodeCount>> GetStatusCodesAsync(DateTime fromUtc, DateTime toUtc,
+        CancellationToken ct = default) =>
         WithUnitOfWork(uow => uow.ProxyLogs.GetStatusCodeBreakdownAsync(fromUtc, toUtc, ct));
 
-    public async Task<List<CategoryTrafficDto>> GetCategoriesAsync(DateTime fromUtc, DateTime toUtc, int sampleHosts, CancellationToken ct = default)
+    public async Task<List<CategoryTrafficDto>> GetCategoriesAsync(DateTime fromUtc, DateTime toUtc, int sampleHosts,
+        CancellationToken ct = default)
     {
         using var scope = _scopeFactory.CreateScope();
         var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
@@ -54,7 +59,8 @@ public sealed class DashboardService
 
     // ---- blocklist --------------------------------------------------------
 
-    public async Task<List<BlockedDomainDto>> GetBlockedAsync(string? source, string? search, int count, CancellationToken ct = default)
+    public async Task<List<BlockedDomainDto>> GetBlockedAsync(string? source, string? search, int count,
+        CancellationToken ct = default)
     {
         BlockSource? parsed = null;
         if (!string.IsNullOrEmpty(source) && Enum.TryParse<BlockSource>(source, true, out var value))
@@ -66,12 +72,14 @@ public sealed class DashboardService
         {
             var domains = await uow.BlockedDomains.SearchAsync(parsed, search, count, ct).ConfigureAwait(false);
             return domains
-                .Select(d => new BlockedDomainDto(d.Id, d.Domain, d.Source.ToString(), d.Reason, d.CreatedAtUtc, d.IsActive, d.ExpiresAtUtc))
+                .Select(d => new BlockedDomainDto(d.Id, d.Domain, d.Source.ToString(), d.Reason, d.CreatedAtUtc,
+                    d.IsActive, d.ExpiresAtUtc))
                 .ToList();
         }).ConfigureAwait(false);
     }
 
-    public async Task<MutationResult> AddBlockedAsync(string rawDomain, string? reason, int? expiresInHours, CancellationToken ct = default)
+    public async Task<MutationResult> AddBlockedAsync(string rawDomain, string? reason, int? expiresInHours,
+        CancellationToken ct = default)
     {
         var domain = DomainUtils.NormalizeDomain(rawDomain);
         if (domain is null)
@@ -147,7 +155,8 @@ public sealed class DashboardService
 
     // ---- allowlist --------------------------------------------------------
 
-    public async Task<List<AllowedDomainDto>> GetAllowedAsync(string? search, int count, CancellationToken ct = default) =>
+    public async Task<List<AllowedDomainDto>>
+        GetAllowedAsync(string? search, int count, CancellationToken ct = default) =>
         await WithUnitOfWork(async uow =>
         {
             var domains = await uow.AllowedDomains.SearchAsync(search, count, ct).ConfigureAwait(false);
@@ -197,7 +206,8 @@ public sealed class DashboardService
 
     // ---- alerts -----------------------------------------------------------
 
-    public async Task<List<AlertDto>> GetAlertsAsync(bool onlyUnacknowledged, int count, CancellationToken ct = default) =>
+    public async Task<List<AlertDto>>
+        GetAlertsAsync(bool onlyUnacknowledged, int count, CancellationToken ct = default) =>
         await WithUnitOfWork(async uow =>
         {
             var alerts = await uow.Alerts.GetAlertsAsync(onlyUnacknowledged, count, ct).ConfigureAwait(false);
@@ -236,6 +246,126 @@ public sealed class DashboardService
         using var scope = _scopeFactory.CreateScope();
         var diagnostics = scope.ServiceProvider.GetRequiredService<SystemDiagnostics>();
         return await diagnostics.RunAsync(ct).ConfigureAwait(false);
+    }
+
+    // ---- notifications ----------------------------------------------------
+
+    public async Task<NotificationSettingsViewModel> GetNotificationSettingsAsync(CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var store = scope.ServiceProvider.GetRequiredService<INotificationSettingsStore>();
+        var s = await store.GetAsync(ct).ConfigureAwait(false);
+
+        return new NotificationSettingsViewModel(
+            s.MinimumSeverity.ToString(),
+            s.TelegramEnabled,
+            !string.IsNullOrWhiteSpace(s.TelegramBotToken),
+            Mask(s.TelegramBotToken),
+            s.TelegramChatId,
+            s.EmailEnabled,
+            s.EmailHost,
+            s.EmailPort,
+            s.EmailUseSsl,
+            s.EmailUsername,
+            !string.IsNullOrWhiteSpace(s.EmailPassword),
+            s.EmailFrom,
+            s.EmailTo);
+    }
+
+    public async Task<MutationResult> SaveNotificationSettingsAsync(NotificationSettingsInput input,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        using var scope = _scopeFactory.CreateScope();
+        var store = scope.ServiceProvider.GetRequiredService<INotificationSettingsStore>();
+        var current = await store.GetAsync(ct).ConfigureAwait(false);
+
+        var severity = Enum.TryParse<NotificationSeverity>(input.MinimumSeverity, true, out var parsed)
+            ? parsed
+            : current.MinimumSeverity;
+
+        // A blank secret means "keep the stored one" — the browser never sees it.
+        var token = string.IsNullOrWhiteSpace(input.TelegramBotToken)
+            ? current.TelegramBotToken
+            : input.TelegramBotToken.Trim();
+        var password = string.IsNullOrWhiteSpace(input.EmailPassword)
+            ? current.EmailPassword
+            : input.EmailPassword.Trim();
+
+        if (input.TelegramEnabled &&
+            (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(input.TelegramChatId)))
+        {
+            return MutationResult.Fail("Telegram needs a bot token and a chat id.");
+        }
+
+        if (input.EmailEnabled &&
+            (string.IsNullOrWhiteSpace(input.EmailHost) ||
+             string.IsNullOrWhiteSpace(input.EmailFrom) ||
+             string.IsNullOrWhiteSpace(input.EmailTo)))
+        {
+            return MutationResult.Fail("E-mail needs a host, a from address and at least one recipient.");
+        }
+
+        var snapshot = new NotificationSettingsSnapshot(
+            severity,
+            input.TelegramEnabled,
+            token,
+            input.TelegramChatId,
+            input.EmailEnabled,
+            input.EmailHost,
+            input.EmailPort > 0 ? input.EmailPort : 587,
+            input.EmailUseSsl,
+            input.EmailUsername,
+            password,
+            input.EmailFrom,
+            input.EmailTo);
+
+        await store.SaveAsync(snapshot, ct).ConfigureAwait(false);
+        return MutationResult.Ok();
+    }
+
+    /// <summary>
+    /// Sends a test message through one channel ("Telegram" or "Email") using the
+    /// currently saved settings, so the user can verify them from the dashboard.
+    /// </summary>
+    public async Task<MutationResult> SendTestNotificationAsync(string channel, CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var senders = scope.ServiceProvider.GetServices<INotificationSender>();
+        var sender = senders.FirstOrDefault(x => string.Equals(x.Channel, channel, StringComparison.OrdinalIgnoreCase));
+
+        if (sender is null)
+        {
+            return MutationResult.Fail($"Unknown channel '{channel}'.");
+        }
+
+        if (!sender.IsEnabled)
+        {
+            return MutationResult.Fail($"{sender.Channel} is not enabled and configured. Save the settings first.");
+        }
+
+        var message = new NotificationMessage(
+            "Test notification",
+            $"This is a PiProxyGuard test message sent at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC.",
+            NotificationSeverity.Critical);
+
+        var ok = await sender.SendAsync(message, ct).ConfigureAwait(false);
+        return ok
+            ? MutationResult.Ok()
+            : MutationResult.Fail($"{sender.Channel} test failed — check the token/credentials and the server logs.");
+    }
+
+    private static string? Mask(string? secret)
+    {
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            return null;
+        }
+
+        var trimmed = secret.Trim();
+        var tail = trimmed.Length <= 4 ? trimmed : trimmed[^4..];
+        return $"\u2022\u2022\u2022{tail}";
     }
 
     // ---- helpers ----------------------------------------------------------

@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.6.0 — Notifications from the dashboard
+
+### Added
+- **Configure notifications from the UI.** New **Settings** page in the dashboard
+  lets any user turn **Telegram** and **Email (SMTP)** alerts on/off, enter the bot
+  token / chat id and SMTP host, credentials and recipients, pick the minimum
+  severity, and fire a **Send test** for each channel — no `appsettings`/env edit
+  and no restart. Works on every install, including the `arm64.deb` and
+  `arm64.tar.gz` packages.
+- **Settings stored in the database.** A new single-row `NotificationSettings`
+  table (EF Core migration `AddNotificationSettings`) is the shared source of
+  truth, so the **Worker** (which sends the alerts) and the **API/dashboard**
+  (which edits them) — two separate processes over one SQLite file — stay in sync.
+  A background refresher picks up changes within ~10s without a restart.
+- **REST parity.** `GET`/`PUT /api/notifications/settings` and
+  `POST /api/notifications/test` mirror the Settings page. Secrets (bot token, SMTP
+  password) are never returned — only a masked preview and a "has value" flag, and
+  a blank secret on save keeps the stored one.
+
+### Changed
+- The Telegram and e-mail channels and the dispatcher now read their configuration
+  from the runtime settings store instead of start-up `IOptions`. The
+  `Notifications` section of `appsettings`/environment is still honoured as a
+  fallback when no settings have been saved yet, so existing installs keep working.
+
+## 1.5.0 — Blocklist & diagnostics fixes
+
+### Fixed
+- **Squid no longer aborts with `FATAL: Bungled ... subdomain of`.** When a
+  parent domain and one of its own subdomains both ended up in the generated
+  ACL, Squid refused to start. The ACL writer now collapses entries to the
+  broadest domain (a blocked parent already covers every subdomain), so the
+  generated `blocked_domains.acl` is always valid.
+- **No more startup race on `blocked_domains.acl`.** If the Worker started
+  before the ACL file existed, Squid logged `Can not open ... blocked_domains.acl`.
+  The Worker now ensures a placeholder ACL file exists before Squid reads it.
+- **`log-ingestion` diagnostic stops flapping to *Error* on an idle proxy.** The
+  ingestion bookmark is now touched on every poll (not only when new lines
+  arrive), so a quiet network no longer looks like a stalled ingester.
+- **Removing a feed/auto domain now sticks.** Deleting a domain that came from a
+  downloaded feed used to be re-added on the next feed sync. Removing a
+  feed/auto entry now also adds it to the allowlist (which overrides the
+  blocklist) and the feed sync skips allowlisted domains. Manual entries are
+  still simply deleted.
+
+### Changed
+- **`deploy/squid.conf.sample` cleanup** — removed a duplicate `logformat squid`
+  redefinition and the obsolete `dns_v4_first` directive so Squid starts without
+  warnings.
+
 ## 1.4.0 — Resilience & API hardening
 
 ### Added
