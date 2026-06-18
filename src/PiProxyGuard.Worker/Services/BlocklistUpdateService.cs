@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using PiProxyGuard.Infrastructure.Blocklists;
+using PiProxyGuard.Infrastructure.Squid;
 using PiProxyGuard.Infrastructure.Options;
 
 namespace PiProxyGuard.Worker.Services;
@@ -29,6 +30,20 @@ public class BlocklistUpdateService : BackgroundService
         _logger.LogInformation(
             "Blocklist updater started: {FeedCount} feeds, every {Hours} h",
             _options.Feeds.Count, _options.UpdateIntervalHours);
+
+        // Seed an empty ACL immediately so Squid can start (and stay healthy)
+        // even before the first feed download completes — otherwise squid.conf
+        // references a file that does not exist yet ("Can not open file ...").
+        try
+        {
+            using var seedScope = _scopeFactory.CreateScope();
+            var aclWriter = seedScope.ServiceProvider.GetRequiredService<SquidAclWriter>();
+            await aclWriter.EnsureAclFileExistsAsync(stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not seed initial ACL file");
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {
