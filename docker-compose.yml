@@ -17,6 +17,7 @@ services:
       - "3128:3128"          # proxy port for your devices
     volumes:
       - squid-config:/etc/squid
+      - ./deploy/squid.conf.sample:/etc/squid/squid.conf:ro
       - squid-logs:/var/log/squid
     healthcheck:
       test: ["CMD", "sh", "-c", "squid -k check || exit 1"]

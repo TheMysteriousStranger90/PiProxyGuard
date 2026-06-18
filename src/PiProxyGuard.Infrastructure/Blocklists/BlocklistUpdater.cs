@@ -120,10 +120,15 @@ public class BlocklistUpdater
         var nonFeedDomains = await repository.GetNonFeedDomainNamesAsync(cancellationToken);
         var occupied = nonFeedDomains.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        // Never re-add a domain the user has allowlisted (e.g. one they removed from
+        // the blocklist). Without this the feed sync would instantly undo the removal.
+        var allowlisted = (await _unitOfWork.AllowedDomains.GetAllDomainNamesAsync(cancellationToken))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var now = DateTime.UtcNow;
         foreach (var domain in feedDomains)
         {
-            if (!existing.ContainsKey(domain) && !occupied.Contains(domain))
+            if (!existing.ContainsKey(domain) && !occupied.Contains(domain) && !allowlisted.Contains(domain))
             {
                 repository.Add(new BlockedDomain
                 {
