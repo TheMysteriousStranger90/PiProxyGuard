@@ -63,10 +63,6 @@ public class LogIngestionService : BackgroundService
             ?? new LogIngestionState { FilePath = _options.Path };
 
         var result = LogFileTailer.ReadNewLines(_options.Path, state.Offset, state.FirstLineFingerprint);
-        if (result.Lines.Count == 0 && result.NewOffset == state.Offset)
-        {
-            return;
-        }
 
         var parsed = 0;
         var batch = new List<ProxyLogEntry>(_options.BatchSize);
@@ -92,6 +88,9 @@ public class LogIngestionService : BackgroundService
             unitOfWork.ProxyLogs.AddRange(batch);
         }
 
+        // Always advance the heartbeat so the diagnostics freshness check reflects
+        // that the poller is alive and keeping up. An idle proxy (no new requests)
+        // must not be reported as an ingestion failure / readiness 503.
         state.Offset = result.NewOffset;
         state.FirstLineFingerprint = result.FirstLineFingerprint;
         state.UpdatedAtUtc = DateTime.UtcNow;
@@ -102,10 +101,10 @@ public class LogIngestionService : BackgroundService
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await CleanupOldEntriesAsync(unitOfWork, cancellationToken);
 
         if (parsed > 0)
         {
+            await CleanupOldEntriesAsync(unitOfWork, cancellationToken);
             _logger.LogInformation("Ingested {Count} log entries (offset {Offset})", parsed, state.Offset);
         }
     }

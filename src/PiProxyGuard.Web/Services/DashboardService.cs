@@ -114,7 +114,25 @@ public sealed class DashboardService
             return false;
         }
 
+        var domain = entity.Domain;
+        var feedManaged = entity.Source is BlockSource.Feed or BlockSource.Auto;
+
         uow.BlockedDomains.Remove(entity);
+
+        // Feed/auto entries are re-created on the next feed sync unless we record an
+        // explicit "don't block" decision. Allowlisting the domain makes the removal
+        // stick (and the domain moves to the Allowlist tab, where it can be undone).
+        if (feedManaged &&
+            await uow.AllowedDomains.FindByDomainAsync(domain, ct).ConfigureAwait(false) is null)
+        {
+            uow.AllowedDomains.Add(new AllowedDomain
+            {
+                Domain = domain,
+                Reason = "Removed from blocklist",
+                CreatedAtUtc = DateTime.UtcNow
+            });
+        }
+
         await uow.SaveChangesAsync(ct).ConfigureAwait(false);
         await updater.UpdateAsync(ct).ConfigureAwait(false);
         return true;
