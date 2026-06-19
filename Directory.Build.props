@@ -8,10 +8,20 @@
     <Deterministic>true</Deterministic>
 
     <!-- Product version -->
-    <Version>1.6.0</Version>
-    <AssemblyVersion>1.6.0.0</AssemblyVersion>
-    <FileVersion>1.6.0.0</FileVersion>
-    <InformationalVersion>1.6.0</InformationalVersion>
+    <Version>1.7.0</Version>
+    <AssemblyVersion>1.7.0.0</AssemblyVersion>
+    <FileVersion>1.7.0.0</FileVersion>
+    <InformationalVersion>1.7.0</InformationalVersion>
+
+    <!-- Project / author metadata (embedded into assembly attributes) -->
+    <Product>PiProxyGuard</Product>
+    <Authors>Bohdan Harabadzhyu</Authors>
+    <Company>Bohdan Harabadzhyu</Company>
+    <Copyright>Copyright © Bohdan Harabadzhyu</Copyright>
+    <Description>Proxy traffic statistics and protection for Raspberry Pi: log analytics, a domain blocklist, anomaly detection, a Blazor dashboard and REST API.</Description>
+    <PackageProjectUrl>https://github.com/TheMysteriousStranger90/PiProxyGuard</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/TheMysteriousStranger90/PiProxyGuard.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>

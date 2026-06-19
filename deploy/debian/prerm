@@ -7,4 +7,11 @@ case "$1" in
     fi
     ;;
 esac
+
+# On a real removal (not an upgrade), tear down any transparent-mode network
+# changes so we don't leave dangling iptables rules / forwarding behind.
+if [ "$1" = "remove" ] && [ -x /usr/lib/piproxyguard/transparent-setup.sh ]; then
+    sh /usr/lib/piproxyguard/transparent-setup.sh disable 2>/dev/null || true
+fi
+
 exit 0

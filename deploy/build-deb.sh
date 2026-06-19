@@ -43,6 +43,18 @@ cp "$SCRIPT_DIR/piproxyguard-worker.service" "$STAGE/lib/systemd/system/"
 install -d "$STAGE/usr/share/piproxyguard"
 cp "$SCRIPT_DIR/squid.conf.sample" "$STAGE/usr/share/piproxyguard/squid.conf.sample"
 
+# ---- payload: transparent (whole-LAN) engine + user command ----
+install -d "$STAGE/usr/lib/piproxyguard"
+install -m 0755 "$SCRIPT_DIR/transparent/setup-transparent.sh" \
+        "$STAGE/usr/lib/piproxyguard/transparent-setup.sh"
+install -d "$STAGE/usr/bin"
+cat > "$STAGE/usr/bin/piproxyguard-transparent" <<'EOF'
+#!/bin/sh
+# Thin wrapper around the PiProxyGuard transparent-mode engine.
+exec /usr/lib/piproxyguard/transparent-setup.sh "$@"
+EOF
+chmod 0755 "$STAGE/usr/bin/piproxyguard-transparent"
+
 # ---- control + maintainer scripts ----
 install -d "$STAGE/DEBIAN"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__ARCH__/$ARCH/" \
