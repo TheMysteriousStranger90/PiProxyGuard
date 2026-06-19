@@ -209,5 +209,10 @@ h2 { font-size: 1rem; margin: 0; font-weight: 600; }
 .field.check { flex-direction: row; align-items: center; gap: 8px; }
 .field-label { font-size: .78rem; color: var(--muted); font-weight: 600; }
 .field .input { width: 100%; }
+.input-eye { position: relative; display: flex; width: 100%; }
+.input-eye .input { width: 100%; padding-right: 38px; }
+.eye-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; background: transparent; border: 0; border-radius: 7px; color: var(--muted); cursor: pointer; transition: color .12s, background .12s; }
+.eye-btn:hover { color: var(--text); background: var(--bg-2); }
+.eye-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .selfcenter { align-self: center; }
 .switch { display: inline-flex; align-items: center; gap: 7px; font-size: .82rem; color: var(--muted); font-weight: 600; }
