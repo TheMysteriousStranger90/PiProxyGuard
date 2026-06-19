@@ -90,7 +90,10 @@ fi
 echo "$APP_USER ALL=(root) NOPASSWD: $SQUID_BIN -k reconfigure" > /etc/sudoers.d/piproxyguard
 chmod 440 /etc/sudoers.d/piproxyguard
 
-# --------------- 7. point the worker config at sudo reload -----------------
+# --------------- 7. point BOTH services at sudo reload ---------------------
+# The API hosts the dashboard in-process: manual block/allow changes there also
+# rewrite the ACL and must be able to reconfigure squid. Patching only the
+# worker leaves manual blocks broken (reload fails -> ACL rolled back).
 WORKER_CFG="$INSTALL_DIR/worker/appsettings.json"
 if [ -f "$WORKER_CFG" ]; then
     tmp="$(mktemp)"
@@ -101,6 +104,16 @@ if [ -f "$WORKER_CFG" ]; then
        "$WORKER_CFG" > "$tmp" && mv "$tmp" "$WORKER_CFG"
     chown "$APP_USER":"$APP_USER" "$WORKER_CFG"
     log "Patched worker appsettings.json (ReloadCommand / AccessLog / DB path)"
+fi
+
+API_CFG="$INSTALL_DIR/api/appsettings.json"
+if [ -f "$API_CFG" ]; then
+    tmp="$(mktemp)"
+    jq --arg rc "sudo $SQUID_BIN -k reconfigure" \
+       '.Blocklist.ReloadCommand = $rc' \
+       "$API_CFG" > "$tmp" && mv "$tmp" "$API_CFG"
+    chown "$APP_USER":"$APP_USER" "$API_CFG"
+    log "Patched api appsettings.json (ReloadCommand)"
 fi
 
 # ------------------------- 8. systemd units --------------------------------
