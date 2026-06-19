@@ -2,11 +2,17 @@
 
 Home proxy statistics and protection for a Raspberry Pi, built with **.NET 9**.
 
+![Image 1](screenshots/20260619_01h56m16s_grim.png)
+![Image 2](screenshots/20260619_01h56m24s_grim.png)
+![Image 3](screenshots/20260619_01h59m45s_grim.png)
+![Image 4](screenshots/20260619_02h01m23s_grim.png)
+![Image 5](screenshots/20260619_02h16m27s_grim.png)
+
 Squid (or any proxy writing the Squid native log format) does the proxying; PiProxyGuard does everything around it:
 
 - **Worker Service** tails `access.log`, parses every request and stores it in **SQLite** via **EF Core**
 - **Web API** serves traffic statistics: totals, top sites, top devices, hourly timeline, status codes
-- **Blocklist updater** downloads fresh blocklists (hosts files or HTML pages parsed with **AngleSharp**) on a schedule, merges them with your manual entries and rewrites the Squid ACL file, then runs `squid -k reconfigure`
+- **Blocklist updater** downloads fresh blocklists (hosts files or HTML pages parsed with **AngleSharp**) on a schedule, merges them with your manual entries and rewrites the Squid ACL file **in place**, then runs `squid -k reconfigure`
 - **Suspicious-activity detector** raises alerts for request floods, traffic spikes (vs. each device’s own baseline), repeated denied requests, contacts with blocklisted domains and algorithmically-generated (DGA) hostnames — with optional auto-blocking (TTL) and per-device thresholds
 - **Allowlist** that always overrides the blocklist, **notifications** (Telegram / e-mail, configurable from the dashboard), **threat-intel** lookups (free URLhaus), **domain categorization**, **self-diagnostics**, **backup/restore**, **digest reports** and **Prometheus** metrics
 
@@ -185,12 +191,12 @@ Open `http://<pi>:5080/` and point your devices' HTTP/HTTPS proxy at `<pi>:3128`
    sudo mkdir -p /var/lib/piproxyguard
    sudo chown piproxyguard /var/lib/piproxyguard        # sqlite db lives here
    sudo touch /etc/squid/blocked_domains.acl
-   sudo chown piproxyguard /etc/squid/blocked_domains.acl
+   sudo chown piproxyguard /etc/squid/blocked_domains.acl   # the worker rewrites this file in place — owning the file is enough, no /etc/squid dir write needed
    # allow the worker to reload squid without full sudo:
    echo 'piproxyguard ALL=(root) NOPASSWD: /usr/sbin/squid -k reconfigure' | sudo tee /etc/sudoers.d/piproxyguard
    ```
 
-   Then set `"ReloadCommand": "sudo /usr/sbin/squid -k reconfigure"` in the Worker's `appsettings.json`.
+   Then set `"ReloadCommand": "sudo /usr/sbin/squid -k reconfigure"` in **both** the Worker's **and** the API's `appsettings.json`. The API hosts the dashboard in-process, so manual block/allow changes made there also rewrite the ACL and must be able to reconfigure Squid — if only the Worker is configured, manual blocks fail to reload and get rolled back.
 
 4. **Install the systemd units**:
 
@@ -201,6 +207,33 @@ Open `http://<pi>:5080/` and point your devices' HTTP/HTTPS proxy at `<pi>:3128`
    ```
 
 5. Check: `journalctl -u piproxyguard-worker -f` and open `http://<pi>:5080/swagger`.
+
+## Troubleshooting & diagnostics
+
+Handy commands once it's running on the Pi:
+
+```bash
+# If a manual `dpkg -i` left unmet dependencies, fix them:
+sudo apt-get update
+sudo apt-get install -f -y
+
+# Are the services up?
+systemctl status squid piproxyguard-api piproxyguard-worker --no-pager
+
+# Recent logs (last 50 lines each):
+journalctl -u piproxyguard-api -n 50 --no-pager
+journalctl -u piproxyguard-worker -n 50 --no-pager
+
+# Find the Pi's IP address (use it as <pi> below and as the proxy host on your devices):
+hostname -I
+```
+
+Open the dashboard:
+
+- On the Pi itself: <http://localhost:5080/>
+- From another device on the LAN: `http://<pi>:5080/` (use the IP from `hostname -I`)
+
+Point your devices' HTTP/HTTPS proxy at `<pi>:3128`.
 
 ## Running locally (development)
 

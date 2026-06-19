@@ -45,19 +45,38 @@ case "$1" in
     echo "$APP_USER ALL=(root) NOPASSWD: $SQUID_BIN -k reconfigure" > /etc/sudoers.d/piproxyguard
     chmod 440 /etc/sudoers.d/piproxyguard
 
-    # --- point the worker config at the sudo reload + correct paths ---
-    WORKER_CFG="$INSTALL_DIR/worker/appsettings.json"
-    if [ -f "$WORKER_CFG" ] && command -v jq >/dev/null 2>&1; then
-        tmp="$(mktemp)"
-        if jq --arg rc "sudo $SQUID_BIN -k reconfigure" \
-              '.Blocklist.ReloadCommand=$rc
-               | .AccessLog.Path="/var/log/squid/access.log"
-               | .ConnectionStrings.Default="Data Source=/var/lib/piproxyguard/piproxyguard.db"' \
-              "$WORKER_CFG" > "$tmp" 2>/dev/null; then
-            mv "$tmp" "$WORKER_CFG"
-            chown "$APP_USER":"$APP_USER" "$WORKER_CFG" 2>/dev/null || true
-        else
-            rm -f "$tmp"
+    # --- point BOTH services at the sudo reload + correct paths ---
+    # The API hosts the dashboard in-process, so manual block/allow changes made
+    # there also rewrite the ACL and must be able to reconfigure squid. If only
+    # the worker gets the sudo reload command, manual blocks fail to reload and
+    # SquidAclWriter rolls the ACL back, so they silently never take effect.
+    if command -v jq >/dev/null 2>&1; then
+        WORKER_CFG="$INSTALL_DIR/worker/appsettings.json"
+        if [ -f "$WORKER_CFG" ]; then
+            tmp="$(mktemp)"
+            if jq --arg rc "sudo $SQUID_BIN -k reconfigure" \
+                  '.Blocklist.ReloadCommand=$rc
+                   | .AccessLog.Path="/var/log/squid/access.log"
+                   | .ConnectionStrings.Default="Data Source=/var/lib/piproxyguard/piproxyguard.db"' \
+                  "$WORKER_CFG" > "$tmp" 2>/dev/null; then
+                mv "$tmp" "$WORKER_CFG"
+                chown "$APP_USER":"$APP_USER" "$WORKER_CFG" 2>/dev/null || true
+            else
+                rm -f "$tmp"
+            fi
+        fi
+
+        API_CFG="$INSTALL_DIR/api/appsettings.json"
+        if [ -f "$API_CFG" ]; then
+            tmp="$(mktemp)"
+            if jq --arg rc "sudo $SQUID_BIN -k reconfigure" \
+                  '.Blocklist.ReloadCommand=$rc' \
+                  "$API_CFG" > "$tmp" 2>/dev/null; then
+                mv "$tmp" "$API_CFG"
+                chown "$APP_USER":"$APP_USER" "$API_CFG" 2>/dev/null || true
+            else
+                rm -f "$tmp"
+            fi
         fi
     fi
 
