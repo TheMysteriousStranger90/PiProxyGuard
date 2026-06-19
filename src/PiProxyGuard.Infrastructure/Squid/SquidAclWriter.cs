@@ -9,10 +9,12 @@ namespace PiProxyGuard.Infrastructure.Squid;
 
 /// <summary>
 /// Writes the aggregated blocklist as a Squid dstdomain ACL file and triggers
-/// "squid -k reconfigure" when the content actually changed. To keep the proxy
-/// resilient, a ".bak" copy of the previous ACL is taken before each rewrite;
-/// if the reload command fails the previous file is restored automatically so a
-/// malformed blocklist can never take the proxy down.
+/// "squid -k reconfigure" when the content actually changed. The file is
+/// rewritten in place: the service user owns the ACL file but usually not its
+/// parent directory (e.g. /etc/squid), so creating sibling ".bak"/".tmp" files
+/// is not possible. The previous content is instead held in memory and restored
+/// if the reload command fails, so a malformed blocklist can never take the
+/// proxy down.
 /// </summary>
 public class SquidAclWriter
 {
@@ -74,38 +76,38 @@ public class SquidAclWriter
         var path = _options.AclFilePath;
         var fileExisted = File.Exists(path);
 
+        // Hold the currently-live ACL in memory so we can roll back on a failed
+        // reload without writing a sibling ".bak" file (creating files next to the
+        // ACL needs write access to the directory, which the service user usually
+        // lacks — it only owns the ACL file itself).
+        string? previousContent = null;
         if (fileExisted)
         {
-            var existing = await File.ReadAllTextAsync(path, cancellationToken);
-            if (HashOf(existing) == HashOf(newContent))
+            previousContent = await File.ReadAllTextAsync(path, cancellationToken);
+            if (HashOf(previousContent) == HashOf(newContent))
             {
                 return false;
             }
         }
 
+        // Ensure the parent directory exists on first boot. No-op (and needs no
+        // permissions) when it already does, which is the normal case.
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
 
-        // Keep a backup of the currently-live ACL so we can roll back on failure.
-        string? backupPath = null;
-        if (_options.BackupAclBeforeWrite && fileExisted)
-        {
-            backupPath = path + ".bak";
-            File.Copy(path, backupPath, overwrite: true);
-        }
-
-        // Write atomically: temp file + rename, so Squid never reads a half-written ACL.
-        var tempPath = path + ".tmp";
-        await File.WriteAllTextAsync(tempPath, newContent, cancellationToken);
-        File.Move(tempPath, path, overwrite: true);
+        // Rewrite the file in place. Squid only re-reads the ACL on the explicit
+        // reconfigure we trigger *after* this write returns, so the previous
+        // temp-file + rename approach (which required directory write permission)
+        // is unnecessary. Writing in place needs write permission on the file only.
+        await File.WriteAllTextAsync(path, newContent, cancellationToken);
 
         _logger.LogInformation("ACL file {Path} rewritten with {Count} domains", path, effectiveDomains.Count);
 
         LastReloadSucceeded = await RunReloadCommandAsync(cancellationToken);
 
-        if (!LastReloadSucceeded && backupPath is not null && File.Exists(backupPath))
+        if (!LastReloadSucceeded && _options.BackupAclBeforeWrite && previousContent is not null)
         {
             // Reload failed — restore the previous ACL so the proxy keeps serving.
-            File.Copy(backupPath, path, overwrite: true);
+            await File.WriteAllTextAsync(path, previousContent, cancellationToken);
             _logger.LogWarning("Reload failed; rolled back ACL file {Path} to the previous version", path);
             await RunReloadCommandAsync(cancellationToken);
         }
