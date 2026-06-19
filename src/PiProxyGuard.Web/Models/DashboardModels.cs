@@ -31,3 +31,47 @@ public sealed record AlertDto(
 
 /// <summary>Traffic grouped by category for the traffic page.</summary>
 public sealed record CategoryTrafficDto(string Category, long Requests, long Bytes);
+
+/// <summary>
+/// Notification settings as shown on the Settings page. Secrets (the bot token
+/// and SMTP password) are never sent back to the browser — only a "has value"
+/// flag and a short masked preview, so the page can show that a secret is saved
+/// without exposing it.
+/// </summary>
+public sealed record NotificationSettingsViewModel(
+    string MinimumSeverity,
+    bool TelegramEnabled,
+    bool TelegramHasToken,
+    string? TelegramTokenPreview,
+    string? TelegramChatId,
+    bool EmailEnabled,
+    string? EmailHost,
+    int EmailPort,
+    bool EmailUseSsl,
+    string? EmailUsername,
+    bool EmailHasPassword,
+    string? EmailFrom,
+    string? EmailTo);
+
+/// <summary>
+/// The editable notification settings posted from the Settings page. A null or
+/// empty secret (<see cref="TelegramBotToken"/> / <see cref="EmailPassword"/>)
+/// means "keep the stored value", so the user never has to re-type it.
+/// </summary>
+public sealed record NotificationSettingsInput
+{
+    public string MinimumSeverity { get; init; } = "Warning";
+
+    public bool TelegramEnabled { get; init; }
+    public string? TelegramBotToken { get; init; }
+    public string? TelegramChatId { get; init; }
+
+    public bool EmailEnabled { get; init; }
+    public string? EmailHost { get; init; }
+    public int EmailPort { get; init; } = 587;
+    public bool EmailUseSsl { get; init; } = true;
+    public string? EmailUsername { get; init; }
+    public string? EmailPassword { get; init; }
+    public string? EmailFrom { get; init; }
+    public string? EmailTo { get; init; }
+}

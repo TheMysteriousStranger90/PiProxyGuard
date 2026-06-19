@@ -101,8 +101,13 @@ public static class DependencyInjection
             new ClientProfileResolver(sp.GetRequiredService<IOptions<DetectionOptions>>().Value));
         services.AddScoped<SuspiciousActivityDetector>();
 
-        // Notifications: every channel is registered; each one self-disables
-        // until configured, and the dispatcher fans out to the enabled ones.
+        // Notifications: settings are stored in the database (editable from the
+        // dashboard) and cached by a singleton store that a background refresher
+        // keeps fresh, so the separate Worker and API processes share one source
+        // of truth. Every channel is registered; each one self-disables until
+        // configured, and the dispatcher fans out to the enabled ones.
+        services.AddSingleton<INotificationSettingsStore, NotificationSettingsStore>();
+        services.AddHostedService<NotificationSettingsRefresher>();
         services.AddSingleton<INotificationSender, TelegramNotificationSender>();
         services.AddSingleton<INotificationSender, EmailNotificationSender>();
         services.AddSingleton<INotificationDispatcher, NotificationDispatcher>();

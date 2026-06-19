@@ -1,28 +1,27 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using PiProxyGuard.Domain.Abstractions;
-using PiProxyGuard.Infrastructure.Options;
 
 namespace PiProxyGuard.Infrastructure.Notifications;
 
 /// <summary>
 /// Fans a notification out to every enabled <see cref="INotificationSender"/>.
-/// Applies the configured minimum severity and never throws, so callers (the
+/// Applies the configured minimum severity (read from the runtime
+/// <see cref="INotificationSettingsStore"/>) and never throws, so callers (the
 /// detector) can fire-and-forget.
 /// </summary>
 public class NotificationDispatcher : INotificationDispatcher
 {
     private readonly IReadOnlyList<INotificationSender> _senders;
-    private readonly NotificationOptions _options;
+    private readonly INotificationSettingsStore _settings;
     private readonly ILogger<NotificationDispatcher> _logger;
 
     public NotificationDispatcher(
         IEnumerable<INotificationSender> senders,
-        IOptions<NotificationOptions> options,
+        INotificationSettingsStore settings,
         ILogger<NotificationDispatcher> logger)
     {
         _senders = senders.ToList();
-        _options = options.Value;
+        _settings = settings;
         _logger = logger;
     }
 
@@ -30,7 +29,13 @@ public class NotificationDispatcher : INotificationDispatcher
 
     public async Task<int> DispatchAsync(NotificationMessage message, CancellationToken cancellationToken = default)
     {
-        if ((int)message.Severity < (int)_options.MinimumSeverity)
+        ArgumentNullException.ThrowIfNull(message);
+
+        // Refresh the cache up front so channel enablement and the severity
+        // threshold reflect the latest settings, even on the Worker process.
+        var snapshot = await _settings.GetAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((int)message.Severity < (int)snapshot.MinimumSeverity)
         {
             return 0;
         }
@@ -46,7 +51,7 @@ public class NotificationDispatcher : INotificationDispatcher
         {
             try
             {
-                if (await sender.SendAsync(message, cancellationToken))
+                if (await sender.SendAsync(message, cancellationToken).ConfigureAwait(false))
                 {
                     delivered++;
                 }

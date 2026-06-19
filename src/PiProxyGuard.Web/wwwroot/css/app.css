@@ -201,3 +201,13 @@ h2 { font-size: 1rem; margin: 0; font-weight: 600; }
     display: none; left: 0; padding: 10px 16px; position: fixed; width: 100%; z-index: 1000;
 }
 #blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: 14px; top: 8px; }
+
+/* ---- settings form ---- */
+.form-grid { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 180px; }
+.field.grow { flex: 1; min-width: 240px; }
+.field.check { flex-direction: row; align-items: center; gap: 8px; }
+.field-label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+.field .input { width: 100%; }
+.selfcenter { align-self: center; }
+.switch { display: inline-flex; align-items: center; gap: 7px; font-size: .82rem; color: var(--muted); font-weight: 600; }

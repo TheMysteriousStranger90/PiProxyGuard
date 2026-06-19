@@ -31,9 +31,22 @@ public class NotificationDispatcherTests
         }
     }
 
-    private static NotificationDispatcher Build(IEnumerable<INotificationSender> senders, NotificationLevel min = NotificationLevel.Warning) =>
-        new(senders, Options.Create(new NotificationOptions { MinimumSeverity = min }),
-            NullLogger<NotificationDispatcher>.Instance);
+    private sealed class FakeSettingsStore : INotificationSettingsStore
+    {
+        private readonly NotificationSettingsSnapshot _snapshot;
+        public FakeSettingsStore(NotificationSeverity min) =>
+            _snapshot = new NotificationSettingsSnapshot(
+                min, false, null, null, false, null, 587, true, null, null, null, null);
+
+        public NotificationSettingsSnapshot Current => _snapshot;
+        public Task<NotificationSettingsSnapshot> GetAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_snapshot);
+        public Task SaveAsync(NotificationSettingsSnapshot snapshot, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
+    private static NotificationDispatcher Build(IEnumerable<INotificationSender> senders, NotificationSeverity min = NotificationSeverity.Warning) =>
+        new(senders, new FakeSettingsStore(min), NullLogger<NotificationDispatcher>.Instance);
 
     [Fact]
     public async Task Fans_out_only_to_enabled_channels()
@@ -55,7 +68,7 @@ public class NotificationDispatcherTests
     public async Task Suppresses_messages_below_minimum_severity()
     {
         var a = new FakeSender("a", enabled: true);
-        var dispatcher = Build([a], min: NotificationLevel.Critical);
+        var dispatcher = Build([a], min: NotificationSeverity.Critical);
 
         var delivered = await dispatcher.DispatchAsync(
             new NotificationMessage("t", "body", NotificationSeverity.Warning), CancellationToken.None);

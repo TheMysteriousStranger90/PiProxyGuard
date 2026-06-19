@@ -1,0 +1,244 @@
+﻿@page "/settings"
+@inherits ComponentBase
+@inject DashboardService Dashboard
+
+<PageTitle>Settings · PiProxyGuard</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Settings</h1>
+        <p class="muted">Notification channels. Alerts are delivered to every enabled channel.</p>
+    </div>
+</div>
+
+@if (_model is null)
+{
+    <section class="panel"><p class="muted pad">Loading…</p></section>
+}
+else
+{
+    <section class="panel">
+        <div class="panel-head"><h2>General</h2></div>
+        <div class="form-grid pad">
+            <label class="field">
+                <span class="field-label">Minimum severity</span>
+                <select class="input" @bind="_minimumSeverity">
+                    <option value="Info">Info</option>
+                    <option value="Warning">Warning</option>
+                    <option value="Critical">Critical</option>
+                </select>
+            </label>
+            <p class="muted small selfcenter">Only alerts at or above this level are delivered.</p>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-head">
+            <h2>Telegram</h2>
+            <label class="switch">
+                <input type="checkbox" @bind="_telegramEnabled" />
+                <span>Enabled</span>
+            </label>
+        </div>
+        <div class="form-grid pad">
+            <label class="field grow">
+                <span class="field-label">Bot token</span>
+                <input class="input" type="password" autocomplete="new-password"
+                       placeholder="@TelegramTokenPlaceholder" @bind="_telegramBotToken" />
+            </label>
+            <label class="field">
+                <span class="field-label">Chat id</span>
+                <input class="input" placeholder="123456789 or -1001234567890" @bind="_telegramChatId" />
+            </label>
+        </div>
+        <div class="form-row pad">
+            <button type="button" class="btn ghost" @onclick="@(() => TestAsync("Telegram"))" disabled="@_busy">Send test</button>
+            <p class="muted small">Create a bot with @@BotFather, then get your chat id (e.g. from @@userinfobot).</p>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-head">
+            <h2>Email (SMTP)</h2>
+            <label class="switch">
+                <input type="checkbox" @bind="_emailEnabled" />
+                <span>Enabled</span>
+            </label>
+        </div>
+        <div class="form-grid pad">
+            <label class="field grow">
+                <span class="field-label">SMTP host</span>
+                <input class="input" placeholder="smtp.example.com" @bind="_emailHost" />
+            </label>
+            <label class="field">
+                <span class="field-label">Port</span>
+                <input class="input narrow" type="number" min="1" max="65535" @bind="_emailPort" />
+            </label>
+            <label class="field check">
+                <input type="checkbox" @bind="_emailUseSsl" />
+                <span class="field-label">Use SSL/TLS</span>
+            </label>
+            <label class="field">
+                <span class="field-label">Username</span>
+                <input class="input" autocomplete="off" placeholder="optional" @bind="_emailUsername" />
+            </label>
+            <label class="field">
+                <span class="field-label">Password</span>
+                <input class="input" type="password" autocomplete="new-password"
+                       placeholder="@EmailPasswordPlaceholder" @bind="_emailPassword" />
+            </label>
+            <label class="field">
+                <span class="field-label">From address</span>
+                <input class="input" placeholder="piproxyguard@host" @bind="_emailFrom" />
+            </label>
+            <label class="field grow">
+                <span class="field-label">To (comma-separated)</span>
+                <input class="input" placeholder="you@host, ops@host" @bind="_emailTo" />
+            </label>
+        </div>
+        <div class="form-row pad">
+            <button type="button" class="btn ghost" @onclick="@(() => TestAsync("Email"))" disabled="@_busy">Send test</button>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="form-row pad">
+            <button type="button" class="btn primary" @onclick="SaveAsync" disabled="@_busy">Save settings</button>
+            @if (_error is not null)
+            {
+                <p class="form-error">@_error</p>
+            }
+            @if (_info is not null)
+            {
+                <p class="form-info">@_info</p>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    private NotificationSettingsViewModel? _model;
+
+    private string _minimumSeverity = "Warning";
+
+    private bool _telegramEnabled;
+    private string _telegramBotToken = string.Empty;
+    private string _telegramChatId = string.Empty;
+
+    private bool _emailEnabled;
+    private string _emailHost = string.Empty;
+    private int _emailPort = 587;
+    private bool _emailUseSsl = true;
+    private string _emailUsername = string.Empty;
+    private string _emailPassword = string.Empty;
+    private string _emailFrom = string.Empty;
+    private string _emailTo = string.Empty;
+
+    private bool _busy;
+    private string? _error;
+    private string? _info;
+
+    private string TelegramTokenPlaceholder =>
+        _model?.TelegramHasToken == true
+            ? $"{_model.TelegramTokenPreview} (saved — leave blank to keep)"
+            : "123456:ABC-DEF…";
+
+    private string EmailPasswordPlaceholder =>
+        _model?.EmailHasPassword == true
+            ? "•••••• (saved — leave blank to keep)"
+            : "optional";
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var model = await Dashboard.GetNotificationSettingsAsync();
+        _model = model;
+
+        _minimumSeverity = model.MinimumSeverity;
+
+        _telegramEnabled = model.TelegramEnabled;
+        _telegramBotToken = string.Empty;
+        _telegramChatId = model.TelegramChatId ?? string.Empty;
+
+        _emailEnabled = model.EmailEnabled;
+        _emailHost = model.EmailHost ?? string.Empty;
+        _emailPort = model.EmailPort > 0 ? model.EmailPort : 587;
+        _emailUseSsl = model.EmailUseSsl;
+        _emailUsername = model.EmailUsername ?? string.Empty;
+        _emailPassword = string.Empty;
+        _emailFrom = model.EmailFrom ?? string.Empty;
+        _emailTo = model.EmailTo ?? string.Empty;
+    }
+
+    private NotificationSettingsInput BuildInput() => new()
+    {
+        MinimumSeverity = _minimumSeverity,
+        TelegramEnabled = _telegramEnabled,
+        TelegramBotToken = NullIfEmpty(_telegramBotToken),
+        TelegramChatId = NullIfEmpty(_telegramChatId),
+        EmailEnabled = _emailEnabled,
+        EmailHost = NullIfEmpty(_emailHost),
+        EmailPort = _emailPort,
+        EmailUseSsl = _emailUseSsl,
+        EmailUsername = NullIfEmpty(_emailUsername),
+        EmailPassword = NullIfEmpty(_emailPassword),
+        EmailFrom = NullIfEmpty(_emailFrom),
+        EmailTo = NullIfEmpty(_emailTo)
+    };
+
+    private async Task SaveAsync()
+    {
+        _error = _info = null;
+        _busy = true;
+        try
+        {
+            var result = await Dashboard.SaveNotificationSettingsAsync(BuildInput());
+            if (!result.Success)
+            {
+                _error = result.Error;
+                return;
+            }
+
+            _info = "Settings saved.";
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task TestAsync(string channel)
+    {
+        _error = _info = null;
+        _busy = true;
+        try
+        {
+            // Save first so the test uses exactly what is on screen.
+            var saved = await Dashboard.SaveNotificationSettingsAsync(BuildInput());
+            if (!saved.Success)
+            {
+                _error = saved.Error;
+                return;
+            }
+
+            var result = await Dashboard.SendTestNotificationAsync(channel);
+            if (result.Success)
+            {
+                _info = $"{channel} test sent — check the channel.";
+                await LoadAsync();
+            }
+            else
+            {
+                _error = result.Error;
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}

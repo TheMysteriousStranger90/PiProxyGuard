@@ -1,36 +1,39 @@
 using System.Net;
 using System.Net.Mail;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using PiProxyGuard.Domain.Abstractions;
-using PiProxyGuard.Infrastructure.Options;
 
 namespace PiProxyGuard.Infrastructure.Notifications;
 
 /// <summary>
-/// Sends notifications by e-mail over SMTP. Disabled (no-op) until at least a
-/// host, sender and recipient are configured. Never throws.
+/// Sends notifications by e-mail over SMTP. Host, credentials and addresses come
+/// from the runtime <see cref="INotificationSettingsStore"/> (editable in the
+/// dashboard). Disabled (no-op) until enabled with at least a host, sender and
+/// recipient. Never throws.
 /// </summary>
 public class EmailNotificationSender : INotificationSender
 {
-    private readonly EmailNotificationOptions _options;
+    private readonly INotificationSettingsStore _settings;
     private readonly ILogger<EmailNotificationSender> _logger;
 
     public EmailNotificationSender(
-        IOptions<NotificationOptions> options,
+        INotificationSettingsStore settings,
         ILogger<EmailNotificationSender> logger)
     {
-        _options = options.Value.Email;
+        _settings = settings;
         _logger = logger;
     }
 
     public string Channel => "Email";
 
-    public bool IsEnabled => _options.Enabled;
+    public bool IsEnabled => _settings.Current.EmailConfigured;
 
     public async Task<bool> SendAsync(NotificationMessage message, CancellationToken cancellationToken = default)
     {
-        if (!IsEnabled)
+        ArgumentNullException.ThrowIfNull(message);
+
+        var snapshot = await _settings.GetAsync(cancellationToken).ConfigureAwait(false);
+        if (!snapshot.EmailConfigured)
         {
             return false;
         }
@@ -39,28 +42,29 @@ public class EmailNotificationSender : INotificationSender
         {
             using var mail = new MailMessage
             {
-                From = new MailAddress(_options.From!),
+                From = new MailAddress(snapshot.EmailFrom!),
                 Subject = $"[PiProxyGuard] {message.Title}",
                 Body = message.Body
             };
 
-            foreach (var recipient in _options.To!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            foreach (var recipient in snapshot.EmailTo!.Split(',',
+                         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 mail.To.Add(recipient);
             }
 
-            using var client = new SmtpClient(_options.Host, _options.Port)
+            using var client = new SmtpClient(snapshot.EmailHost, snapshot.EmailPort)
             {
-                EnableSsl = _options.UseSsl,
+                EnableSsl = snapshot.EmailUseSsl,
                 DeliveryMethod = SmtpDeliveryMethod.Network
             };
 
-            if (!string.IsNullOrEmpty(_options.Username))
+            if (!string.IsNullOrEmpty(snapshot.EmailUsername))
             {
-                client.Credentials = new NetworkCredential(_options.Username, _options.Password);
+                client.Credentials = new NetworkCredential(snapshot.EmailUsername, snapshot.EmailPassword);
             }
 
-            await client.SendMailAsync(mail, cancellationToken);
+            await client.SendMailAsync(mail, cancellationToken).ConfigureAwait(false);
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
