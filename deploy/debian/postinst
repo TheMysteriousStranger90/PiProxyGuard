@@ -88,9 +88,34 @@ case "$1" in
         systemctl enable --now piproxyguard-worker.service piproxyguard-api.service || true
     fi
 
+    # --- optional: whole-LAN transparent interception ---
+    # Off by default (plain forward proxy on :3128). Turn it on with either:
+    #   sudo PIPROXYGUARD_TRANSPARENT=1 apt install ./piproxyguard_*_arm64.deb
+    #   sudo piproxyguard-transparent enable        # any time after install
+    # Once enabled the choice is remembered in /etc/piproxyguard/transparent.conf
+    # and re-applied automatically on every upgrade.
+    TRANSPARENT_CONF=/etc/piproxyguard/transparent.conf
+    ENGINE=/usr/lib/piproxyguard/transparent-setup.sh
+    WANT_TRANSPARENT=0
+    case "$(printf '%s' "${PIPROXYGUARD_TRANSPARENT:-}" | tr 'A-Z' 'a-z')" in
+        1|y|yes|true|on) WANT_TRANSPARENT=1 ;;
+    esac
+    if [ "$WANT_TRANSPARENT" -eq 0 ] && [ -f "$TRANSPARENT_CONF" ] \
+       && grep -q '^TRANSPARENT_ENABLED=1' "$TRANSPARENT_CONF" 2>/dev/null; then
+        WANT_TRANSPARENT=1
+    fi
+    if [ "$WANT_TRANSPARENT" -eq 1 ] && [ -x "$ENGINE" ]; then
+        echo "Enabling whole-LAN transparent interception..."
+        # never fail the install if the network setup hiccups
+        sh "$ENGINE" enable || echo "WARNING: transparent setup reported an error (package install continues)."
+    fi
+
     IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
     [ -n "$IP" ] || IP="<pi-ip>"
     echo "PiProxyGuard installed. Dashboard: http://$IP:5080/   Proxy: $IP:3128"
+    if [ "$WANT_TRANSPARENT" -eq 1 ]; then
+        echo "Transparent mode ON. Final step (router/DHCP): set the LAN gateway to $IP so all devices route through this Pi."
+    fi
     ;;
 esac
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Whole-network (transparent / intercept) blocking — automated by the package.**
+  Enable with `sudo PIPROXYGUARD_TRANSPARENT=1 apt install ./piproxyguard_*_arm64.deb`
+  or `sudo piproxyguard-transparent enable` at any time. The package then configures
+  the whole Pi side itself — IP forwarding, a self-signed cert for `https_port`, the
+  managed Squid intercept block (ports 80→3129 / 443→3130), tagged `iptables`
+  REDIRECT/MASQUERADE rules and their persistence — and re-applies the choice on every
+  upgrade. So the blocklist applies to **every device** routed through the Pi with no
+  manual config edits. HTTPS is blocked by **SNI** (`ssl_bump peek` + `terminate`/`splice`)
+  **without decrypting** traffic, reusing the existing `blocked_domains.acl`.
+- New `piproxyguard-transparent` command (`enable`/`disable`/`status`) and the
+  `deploy/transparent/` guide + engine. `apt remove` reverts transparent mode; `apt purge`
+  also removes `/etc/piproxyguard`. README gained a matching section.
+
+### Changed
+- Package now `Recommends: iptables, netfilter-persistent, openssl` (used only by
+  transparent mode; the plain `:3128` forward-proxy install is unchanged).
+
 ## 1.6.0 — Notifications from the dashboard
 
 ### Added

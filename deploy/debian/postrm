@@ -10,7 +10,8 @@ case "$1" in
     ;;
   purge)
     rm -f /etc/sudoers.d/piproxyguard
-    rm -rf /opt/piproxyguard
+    rm -rf /opt/piproxyguard /etc/piproxyguard
+    rm -f /etc/sysctl.d/99-piproxyguard-forward.conf
     if [ -d /run/systemd/system ]; then
         systemctl daemon-reload 2>/dev/null || true
     fi

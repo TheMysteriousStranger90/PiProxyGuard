@@ -208,6 +208,39 @@ Open `http://<pi>:5080/` and point your devices' HTTP/HTTPS proxy at `<pi>:3128`
 
 5. Check: `journalctl -u piproxyguard-worker -f` and open `http://<pi>:5080/swagger`.
 
+### Whole-network blocking (transparent / intercept)
+
+By default PiProxyGuard only filters traffic that is **explicitly routed through the proxy**
+(`<pi>:3128`). A device that is not configured to use the proxy bypasses it entirely.
+
+To enforce the blocklist for **every device on the LAN** (phones, TVs, etc.) without per-device
+proxy settings and **without decrypting HTTPS**, enable transparent mode. The Pi becomes the
+network gateway, `iptables` redirects ports 80/443 into Squid, and Squid peeks at the TLS
+ClientHello (SNI) to terminate blocked domains, splicing everything else through untouched
+(`ssl_bump peek` + `terminate`/`splice`).
+
+The entire Pi-side setup is automated by the package — no manual config edits:
+
+```bash
+# at install time...
+sudo PIPROXYGUARD_TRANSPARENT=1 apt install ./piproxyguard_*_arm64.deb
+# ...or any time afterwards
+sudo piproxyguard-transparent enable
+```
+
+This enables IP forwarding, generates a self-signed cert for `https_port` (clients never need it),
+appends a managed intercept block to `squid.conf` (with a backup), installs and persists the
+`iptables` rules, and remembers the choice so it is re-applied on every upgrade. The **one** step
+the package can't do is route your LAN through the Pi — set your router's DHCP gateway to the Pi's
+IP (or per-device for testing). Disable any time with `sudo piproxyguard-transparent disable`.
+
+See **[`deploy/transparent/README.md`](deploy/transparent/README.md)** for the full guide, the exact
+`squid.conf` additions, prerequisites (Squid built `--with-openssl`) and rollback.
+
+> **Note:** with no decryption, a blocked **HTTPS** site gets a *connection reset* rather than a
+> friendly 403 page; HTTP blocks still return the normal 403. DoH/DoT and ECH can hide the SNI and
+> bypass SNI-based blocking. The dashboard now shows real per-device IPs instead of just `127.0.0.1`.
+
 ## Troubleshooting & diagnostics
 
 Handy commands once it's running on the Pi:
