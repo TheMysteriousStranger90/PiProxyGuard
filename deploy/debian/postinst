@@ -110,11 +110,24 @@ case "$1" in
         sh "$ENGINE" enable || echo "WARNING: transparent setup reported an error (package install continues)."
     fi
 
+    # --- optional: upstream tunnel (route selected domains via a parent proxy) ---
+    # Shipped with the package as /usr/bin/piproxyguard-upstream. It is NOT enabled
+    # automatically because it needs an external parent proxy and its host:port:
+    #   sudo piproxyguard-upstream enable <host> <port>   # e.g. 10.8.0.1 8888
+    #   sudo piproxyguard-upstream status
+    #   sudo piproxyguard-upstream disable                # all domains go direct again
+    # The parent proxy (VPN/Tor/corporate) must already exist and be reachable from
+    # the Pi - the package cannot bring it up. Manage the tunneled-domain list from
+    # the dashboard's "Upstream tunnel" page (or POST /api/tunnel).
+
     IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
     [ -n "$IP" ] || IP="<pi-ip>"
     echo "PiProxyGuard installed. Dashboard: http://$IP:5080/   Proxy: $IP:3128"
     if [ "$WANT_TRANSPARENT" -eq 1 ]; then
         echo "Transparent mode ON. Final step (router/DHCP): set the LAN gateway to $IP so all devices route through this Pi."
+    fi
+    if [ -x /usr/lib/piproxyguard/upstream-setup.sh ]; then
+        echo "Upstream tunnel available: 'sudo piproxyguard-upstream enable <host> <port>' to route selected domains via a parent proxy."
     fi
     ;;
 esac

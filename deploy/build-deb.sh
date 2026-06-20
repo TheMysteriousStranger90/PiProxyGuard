@@ -55,6 +55,20 @@ exec /usr/lib/piproxyguard/transparent-setup.sh "$@"
 EOF
 chmod 0755 "$STAGE/usr/bin/piproxyguard-transparent"
 
+# ---- payload: upstream tunnel (route selected domains via a parent proxy) ----
+# Shipped exactly like transparent mode: engine in /usr/lib, thin user command in
+# /usr/bin. Unlike transparent it is NOT auto-enabled at install (it needs a
+# parent host:port), so the user runs:  piproxyguard-upstream enable <host> <port>
+install -d "$STAGE/usr/lib/piproxyguard" "$STAGE/usr/bin"
+install -m 0755 "$SCRIPT_DIR/upstream-tunnel/setup-upstream.sh" \
+        "$STAGE/usr/lib/piproxyguard/upstream-setup.sh"
+cat > "$STAGE/usr/bin/piproxyguard-upstream" <<'EOF'
+#!/bin/sh
+# Thin wrapper around the PiProxyGuard upstream-tunnel engine.
+exec /usr/lib/piproxyguard/upstream-setup.sh "$@"
+EOF
+chmod 0755 "$STAGE/usr/bin/piproxyguard-upstream"
+
 # ---- control + maintainer scripts ----
 install -d "$STAGE/DEBIAN"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__ARCH__/$ARCH/" \
