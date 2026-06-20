@@ -1,9 +1,13 @@
+@implements IDisposable
+@inject LiveUpdateNotifier Notifier
+@inject DashboardService Dashboard
+
 <nav class="sidebar">
     <div class="brand">
         <img class="brand-logo" src="_content/PiProxyGuard.Web/img/Logo.png" alt="PiProxyGuard logo" width="34" height="34" />
         <div>
             <div class="brand-name">PiProxyGuard</div>
-            <div class="brand-sub">v1.8.0</div>
+            <div class="brand-sub">v1.9.0</div>
         </div>
     </div>
 
@@ -25,6 +29,10 @@
         </NavLink>
         <NavLink class="nav-item" href="alerts">
             <span class="nav-glyph"></span> Alerts
+            @if (_openAlerts > 0)
+            {
+                <span class="nav-badge" title="@_openAlerts open alert(s)">@(_openAlerts > 99 ? "99+" : _openAlerts.ToString())</span>
+            }
         </NavLink>
         <NavLink class="nav-item" href="diagnostics">
             <span class="nav-glyph"></span> Diagnostics
@@ -39,3 +47,48 @@
         <a class="nav-item subtle" href="metrics" target="_blank">Metrics ↗</a>
     </div>
 </nav>
+
+@code {
+    private int _openAlerts;
+    private bool _refreshing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Notifier.DataChanged += OnDataChanged;
+        await RefreshAsync();
+    }
+
+    // The live monitor raises DataChanged on every heartbeat (~5s), so the
+    // badge stays current from any page and regardless of whether the Alerts
+    // tab was ever opened. OnInitializedAsync covers the first page load.
+    private void OnDataChanged() => _ = InvokeAsync(RefreshAsync);
+
+    private async Task RefreshAsync()
+    {
+        if (_refreshing)
+        {
+            return;
+        }
+
+        _refreshing = true;
+        try
+        {
+            var count = await Dashboard.GetOpenAlertCountAsync();
+            if (count != _openAlerts)
+            {
+                _openAlerts = count;
+                StateHasChanged();
+            }
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        Notifier.DataChanged -= OnDataChanged;
+        GC.SuppressFinalize(this);
+    }
+}

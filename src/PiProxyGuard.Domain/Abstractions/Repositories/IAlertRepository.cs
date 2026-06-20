@@ -21,4 +21,7 @@ public interface IAlertRepository : IRepository<SuspiciousActivityAlert>
     /// </summary>
     Task<IReadOnlyList<AlertKey>> GetRecentOpenAlertKeysAsync(
         DateTime sinceUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>Number of unacknowledged (open) alerts. Cheap COUNT for the nav badge.</summary>
+    Task<int> GetOpenAlertCountAsync(CancellationToken cancellationToken = default);
 }

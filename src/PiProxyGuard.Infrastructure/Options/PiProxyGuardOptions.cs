@@ -100,6 +100,14 @@ public class DetectionOptions
     /// <summary>Length of the sliding analysis window.</summary>
     public int WindowMinutes { get; set; } = 5;
 
+    /// <summary>
+    /// How long (minutes) the same client + alert-type is suppressed after an
+    /// alert fires, to avoid spamming on repeated identical events. Lower it to
+    /// get notifications more often; 0 disables time-based suppression entirely
+    /// (duplicates within a single detection cycle are still collapsed).
+    /// </summary>
+    public int DuplicateSuppressionMinutes { get; set; } = 60;
+
     /// <summary>Requests per client per window before a HighRequestRate alert fires.</summary>
     public int MaxRequestsPerWindow { get; set; } = 600;
 
