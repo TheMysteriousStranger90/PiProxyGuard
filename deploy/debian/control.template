@@ -2,7 +2,7 @@ Package: piproxyguard
 Version: __VERSION__
 Architecture: __ARCH__
 Maintainer: TheMysteriousStranger90 <noreply@users.noreply.github.com>
-Depends: squid, jq, adduser, sudo
+Depends: squid-openssl | squid, jq, adduser, sudo
 Recommends: iptables, netfilter-persistent, openssl
 Section: net
 Priority: optional
