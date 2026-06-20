@@ -31,4 +31,7 @@ public class AlertRepository : Repository<SuspiciousActivityAlert>, IAlertReposi
         await Set.Where(a => a.DetectedAtUtc >= sinceUtc && !a.IsAcknowledged)
             .Select(a => new AlertKey(a.ClientIp, a.Type))
             .ToListAsync(cancellationToken);
+
+    public async Task<int> GetOpenAlertCountAsync(CancellationToken cancellationToken = default) =>
+        await Set.CountAsync(a => !a.IsAcknowledged, cancellationToken);
 }

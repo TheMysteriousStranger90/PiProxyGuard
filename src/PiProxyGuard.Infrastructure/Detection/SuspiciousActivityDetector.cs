@@ -268,11 +268,19 @@ public class SuspiciousActivityDetector
         }
 
         // Suppress repeats: skip an alert when the same client already has an
-        // unacknowledged alert of the same type within the last hour.
-        var since = DateTime.UtcNow.AddHours(-1);
-        var recent = await _unitOfWork.Alerts.GetRecentOpenAlertKeysAsync(since, cancellationToken);
-
-        var recentKeys = recent.ToHashSet();
+        // unacknowledged alert of the same type within the configured window
+        // (DuplicateSuppressionMinutes). 0 disables time-based suppression.
+        HashSet<AlertKey> recentKeys;
+        if (_options.DuplicateSuppressionMinutes > 0)
+        {
+            var since = DateTime.UtcNow.AddMinutes(-_options.DuplicateSuppressionMinutes);
+            var recent = await _unitOfWork.Alerts.GetRecentOpenAlertKeysAsync(since, cancellationToken);
+            recentKeys = recent.ToHashSet();
+        }
+        else
+        {
+            recentKeys = new HashSet<AlertKey>();
+        }
         var seen = new HashSet<AlertKey>();
         var result = new List<SuspiciousActivityAlert>();
         foreach (var candidate in candidates)

@@ -284,6 +284,10 @@ public sealed class DashboardService
         return true;
     }
 
+    /// <summary>Count of open (unacknowledged) alerts. Backs the nav badge.</summary>
+    public async Task<int> GetOpenAlertCountAsync(CancellationToken ct = default) =>
+        await WithUnitOfWork(uow => uow.Alerts.GetOpenAlertCountAsync(ct)).ConfigureAwait(false);
+
     /// <summary>Highest alert id currently stored (0 when there are none). Used by the live monitor.</summary>
     public async Task<long> GetLatestAlertIdAsync(CancellationToken ct = default)
     {

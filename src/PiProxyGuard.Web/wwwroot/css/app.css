@@ -69,6 +69,12 @@ h2 { font-size: 1rem; margin: 0; font-weight: 600; }
 .nav-glyph { width: 18px; text-align: center; }
 .sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding-top: 14px; border-top: 1px solid var(--border); }
 .nav-item.subtle { font-size: .82rem; padding: 7px 12px; }
+.nav-badge {
+    margin-left: auto; min-width: 20px; padding: 1px 7px; border-radius: 999px;
+    font-size: .72rem; font-weight: 700; text-align: center; line-height: 1.5;
+    background: rgba(255, 91, 91, .16); color: #ff8a8a; border: 1px solid rgba(255, 91, 91, .35);
+}
+.nav-item.active .nav-badge { background: rgba(255, 255, 255, .22); color: #fff; border-color: transparent; }
 
 .app-main { flex: 1; min-width: 0; position: relative; }
 .app-content { padding: 26px 30px 60px; max-width: 1180px; }
