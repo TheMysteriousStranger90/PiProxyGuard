@@ -18,6 +18,8 @@ public sealed record BlockedDomainDto(
 /// <summary>An allowlisted domain as shown in the allowlist page.</summary>
 public sealed record AllowedDomainDto(long Id, string Domain, string? Reason, DateTime CreatedAtUtc);
 
+public sealed record TunneledDomainDto(long Id, string Domain, string? Reason, DateTime CreatedAtUtc);
+
 /// <summary>A suspicious-activity alert as shown in the alerts page and live toasts.</summary>
 public sealed record AlertDto(
     long Id,

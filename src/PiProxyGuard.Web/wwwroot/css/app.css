@@ -54,6 +54,7 @@ h2 { font-size: 1rem; margin: 0; font-weight: 600; }
 
 .brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 18px; }
 .brand-mark { font-size: 1.6rem; }
+.brand-logo { width: 34px; height: 34px; object-fit: contain; display: block; flex: none; }
 .brand-name { font-weight: 700; letter-spacing: .2px; }
 .brand-sub { font-size: .72rem; color: var(--muted); }
 

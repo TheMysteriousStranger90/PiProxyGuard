@@ -17,6 +17,7 @@ public class UnitOfWork : IUnitOfWork
     private IProxyLogRepository? _proxyLogs;
     private IBlockedDomainRepository? _blockedDomains;
     private IAllowedDomainRepository? _allowedDomains;
+    private ITunneledDomainRepository? _tunneledDomains;
     private IAlertRepository? _alerts;
     private ILogIngestionStateRepository? _ingestionStates;
 
@@ -27,6 +28,8 @@ public class UnitOfWork : IUnitOfWork
     public IBlockedDomainRepository BlockedDomains => _blockedDomains ??= new BlockedDomainRepository(_dbContext);
 
     public IAllowedDomainRepository AllowedDomains => _allowedDomains ??= new AllowedDomainRepository(_dbContext);
+
+    public ITunneledDomainRepository TunneledDomains => _tunneledDomains ??= new TunneledDomainRepository(_dbContext);
 
     public IAlertRepository Alerts => _alerts ??= new AlertRepository(_dbContext);
 

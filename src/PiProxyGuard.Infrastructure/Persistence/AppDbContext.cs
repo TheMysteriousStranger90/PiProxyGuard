@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<ProxyLogEntry> LogEntries => Set<ProxyLogEntry>();
     public DbSet<BlockedDomain> BlockedDomains => Set<BlockedDomain>();
     public DbSet<AllowedDomain> AllowedDomains => Set<AllowedDomain>();
+    public DbSet<TunneledDomain> TunneledDomains => Set<TunneledDomain>();
     public DbSet<SuspiciousActivityAlert> Alerts => Set<SuspiciousActivityAlert>();
     public DbSet<LogIngestionState> IngestionStates => Set<LogIngestionState>();
     public DbSet<NotificationSetting> NotificationSettings => Set<NotificationSetting>();
@@ -41,6 +42,13 @@ public class AppDbContext : DbContext
         });
 
         modelBuilder.Entity<AllowedDomain>(builder =>
+        {
+            builder.Property(e => e.Domain).HasMaxLength(253);
+            builder.Property(e => e.Reason).HasMaxLength(500);
+            builder.HasIndex(e => e.Domain).IsUnique();
+        });
+
+        modelBuilder.Entity<TunneledDomain>(builder =>
         {
             builder.Property(e => e.Domain).HasMaxLength(253);
             builder.Property(e => e.Reason).HasMaxLength(500);

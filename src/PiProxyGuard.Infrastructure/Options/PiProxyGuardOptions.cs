@@ -51,6 +51,23 @@ public class BlocklistOptions
     public bool BackupAclBeforeWrite { get; set; } = true;
 }
 
+/// <summary>
+/// Upstream-tunnel options: the Squid ACL that lists the domains routed through
+/// the configured parent proxy (cache_peer) instead of going out directly. The
+/// domain list itself is managed at runtime from the dashboard; the parent proxy
+/// is wired up in squid.conf by deploy/upstream-tunnel/setup-upstream.sh.
+/// </summary>
+public class TunnelOptions
+{
+    public const string SectionName = "Tunnel";
+
+    /// <summary>Where the upstream-tunnel Squid ACL file is written.</summary>
+    public string AclFilePath { get; set; } = "/etc/squid/tunnel_domains.acl";
+
+    /// <summary>Command executed after the ACL file changes (empty = skip).</summary>
+    public string ReloadCommand { get; set; } = "squid -k reconfigure";
+}
+
 /// <summary>Per-client threshold overrides keyed by IP or CIDR prefix.</summary>
 public class ClientProfileOptions
 {

@@ -1,0 +1,117 @@
+﻿@page "/tunnel"
+@inherits LivePageComponent
+
+<PageTitle>Upstream tunnel · PiProxyGuard</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Upstream tunnel</h1>
+        <p class="muted">Domains routed through the configured upstream proxy (cache_peer) instead of going out directly — suffix match, so example.com also covers cdn.example.com. Configure the parent proxy once with <code>setup-upstream.sh enable &lt;host&gt; &lt;port&gt;</code>.</p>
+    </div>
+</div>
+
+<section class="panel">
+    <div class="panel-head"><h2>Tunnel a domain</h2></div>
+    <div class="form-row pad">
+        <input class="input grow" placeholder="example.com" @bind="_newDomain" @bind:event="oninput" />
+        <input class="input grow" placeholder="Reason (optional)" @bind="_newReason" @bind:event="oninput" />
+        <button type="button" class="btn primary" @onclick="AddAsync" disabled="@_busy">Tunnel</button>
+    </div>
+    @if (_error is not null)
+    {
+        <p class="form-error pad">@_error</p>
+    }
+    @if (_info is not null)
+    {
+        <p class="form-info pad">@_info</p>
+    }
+</section>
+
+<section class="panel">
+    <div class="panel-head">
+        <h2>Tunneled domains</h2>
+        <input class="input search" placeholder="Search…" @bind="_search" @bind:event="oninput" @bind:after="ReloadAsync" />
+    </div>
+
+    @if (_items.Count == 0)
+    {
+        <p class="muted pad">No tunneled domains yet.</p>
+    }
+    else
+    {
+        <table class="data-table">
+            <thead><tr><th>Domain</th><th>Reason</th><th>Added</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var item in _items)
+                {
+                    <tr>
+                        <td class="ellipsis">@item.Domain</td>
+                        <td class="ellipsis muted">@(string.IsNullOrEmpty(item.Reason) ? "—" : item.Reason)</td>
+                        <td class="muted">@Format.Ago(item.CreatedAtUtc)</td>
+                        <td class="num">
+                            <button type="button" class="btn ghost danger" @onclick="() => RemoveAsync(item.Id)" disabled="@_busy">Remove</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    private List<TunneledDomainDto> _items = [];
+    private string _search = string.Empty;
+    private string _newDomain = string.Empty;
+    private string _newReason = string.Empty;
+    private string? _error;
+    private string? _info;
+    private bool _busy;
+
+    protected override async Task LoadAsync() =>
+        _items = await Dashboard.GetTunneledAsync(NullIfEmpty(_search), 200);
+
+    private async Task AddAsync()
+    {
+        _error = _info = null;
+        if (string.IsNullOrWhiteSpace(_newDomain))
+        {
+            _error = "Enter a domain.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Dashboard.AddTunneledAsync(_newDomain, NullIfEmpty(_newReason));
+            if (!result.Success)
+            {
+                _error = result.Error;
+                return;
+            }
+
+            _info = $"Tunneling {_newDomain.Trim().ToLowerInvariant()} via the upstream proxy.";
+            _newDomain = _newReason = string.Empty;
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveAsync(long id)
+    {
+        _busy = true;
+        try
+        {
+            await Dashboard.RemoveTunneledAsync(id);
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}

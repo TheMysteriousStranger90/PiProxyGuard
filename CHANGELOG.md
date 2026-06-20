@@ -1,6 +1,31 @@
 # Changelog
 
-## Unreleased
+## 1.8.0 — Upstream tunnel for selected domains
+
+### Added
+- **Upstream tunnel — route only the domains you choose through a parent proxy.**
+  New **Upstream tunnel** page in the dashboard (and `GET/POST/DELETE /api/tunnel`)
+  manages a DB-backed domain list that PiProxyGuard renders into a Squid
+  `dstdomain` ACL (`/etc/squid/tunnel_domains.acl`, leading-dot / suffix match) and
+  reloads Squid on every change — no restart. Listed domains are forced out through
+  an upstream/parent proxy (VPN-side proxy, Tor, another Squid, ...) via
+  `cache_peer` + `cache_peer_access` + `never_direct`; everything else stays direct.
+  It is the runtime-editable mirror of the blocklist/allowlist.
+- New `deploy/upstream-tunnel/` guide + `setup-upstream.sh`
+  (`enable <host> <port> [name]` / `disable` / `status`) that wires the `cache_peer`
+  block into `squid.conf` once (idempotent, reversible, with a backup and
+  `squid -k parse` safety check). The Worker seeds an empty ACL on startup and keeps
+  it in sync; the ACL writer rolls back and reloads if a bad list fails to apply.
+- New entity/table `TunneledDomains` (EF Core migration `AddUpstreamTunnel`),
+  repository, `TunnelOptions`, `TunnelAclWriter`, `TunnelAclUpdater`,
+  `TunnelController` and dashboard service methods. `squid.conf.sample` gained a
+  commented `cache_peer` example. README gained a matching section.
+
+### Changed
+- Dashboard logo: the sidebar now shows the PiProxyGuard `Logo.png` (red shield)
+  instead of the 🛡️ emoji; version bumped to **v1.8.0**.
+
+## 1.7.0 — Whole-network (transparent) blocking
 
 ### Added
 - **Whole-network (transparent / intercept) blocking — automated by the package.**

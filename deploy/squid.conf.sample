@@ -12,6 +12,19 @@ acl localnet src fc00::/7
 acl piproxyguard_blocked dstdomain "/etc/squid/blocked_domains.acl"
 http_access deny piproxyguard_blocked
 
+# --- PiProxyGuard upstream tunnel (optional, v1.8.0) ---
+# Route ONLY selected domains through a parent proxy (VPN-side proxy, Tor, ...),
+# everything else stays direct. Manage the domain list from the dashboard
+# (Upstream tunnel page) or POST /api/tunnel; PiProxyGuard fills tunnel_domains.acl.
+# Easiest: run  deploy/upstream-tunnel/setup-upstream.sh enable <host> <port>
+# Or uncomment and edit the lines below (replace UPSTREAM_HOST / UPSTREAM_PORT):
+#cache_peer UPSTREAM_HOST parent UPSTREAM_PORT 0 no-query default name=ppg_upstream
+#acl piproxyguard_tunnel dstdomain "/etc/squid/tunnel_domains.acl"
+#cache_peer_access ppg_upstream allow piproxyguard_tunnel
+#cache_peer_access ppg_upstream deny all
+#never_direct allow piproxyguard_tunnel
+# NOTE: never_direct = no direct fallback; if the parent is down those domains stop.
+
 # --- Standard access rules ---
 acl SSL_ports port 443
 acl Safe_ports port 80 443 21 1025-65535

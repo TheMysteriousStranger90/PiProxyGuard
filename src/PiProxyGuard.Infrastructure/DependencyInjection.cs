@@ -18,6 +18,7 @@ using PiProxyGuard.Infrastructure.Persistence.Repositories;
 using PiProxyGuard.Infrastructure.Reports;
 using PiProxyGuard.Infrastructure.Squid;
 using PiProxyGuard.Infrastructure.ThreatIntel;
+using PiProxyGuard.Infrastructure.Tunneling;
 
 namespace PiProxyGuard.Infrastructure;
 
@@ -34,6 +35,7 @@ public static class DependencyInjection
     {
         services.Configure<AccessLogOptions>(configuration.GetSection(AccessLogOptions.SectionName));
         services.Configure<BlocklistOptions>(configuration.GetSection(BlocklistOptions.SectionName));
+        services.Configure<TunnelOptions>(configuration.GetSection(TunnelOptions.SectionName));
         services.Configure<DetectionOptions>(configuration.GetSection(DetectionOptions.SectionName));
         services.Configure<ApiOptions>(configuration.GetSection(ApiOptions.SectionName));
         services.Configure<NotificationOptions>(configuration.GetSection(NotificationOptions.SectionName));
@@ -53,6 +55,7 @@ public static class DependencyInjection
         services.AddScoped<IProxyLogRepository, ProxyLogRepository>();
         services.AddScoped<IBlockedDomainRepository, BlockedDomainRepository>();
         services.AddScoped<IAllowedDomainRepository, AllowedDomainRepository>();
+        services.AddScoped<ITunneledDomainRepository, TunneledDomainRepository>();
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<ILogIngestionStateRepository, LogIngestionStateRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -95,6 +98,12 @@ public static class DependencyInjection
         services.AddSingleton<IProxyLogParser, SquidAccessLogParser>();
         services.AddScoped<SquidAclWriter>();
         services.AddScoped<BlocklistUpdater>();
+
+        // Upstream tunnel: a second domain list + Squid ACL (tunnel_domains.acl)
+        // that the cache_peer_access / never_direct rules route through a parent
+        // proxy. Edited from the dashboard, seeded by the Worker on startup.
+        services.AddScoped<TunnelAclWriter>();
+        services.AddScoped<TunnelAclUpdater>();
 
         // Detection support.
         services.AddSingleton(sp =>
