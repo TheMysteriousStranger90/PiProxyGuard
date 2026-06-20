@@ -6,9 +6,25 @@
 <div class="page-header">
     <div>
         <h1>Upstream tunnel</h1>
-        <p class="muted">Domains routed through the configured upstream proxy (cache_peer) instead of going out directly — suffix match, so example.com also covers cdn.example.com. Configure the parent proxy once with <code>setup-upstream.sh enable &lt;host&gt; &lt;port&gt;</code>.</p>
+        <p class="muted">Domains routed through the configured upstream proxy (cache_peer) instead of going out directly — suffix match, so example.com also covers cdn.example.com. This list only chooses the domains; you also have to wire up a parent proxy (see below).</p>
     </div>
 </div>
+
+<section class="panel callout">
+    <div class="panel-head"><h2>Before this list does anything</h2></div>
+    <p class="pad muted">Adding domains here only tells Squid <em>which</em> hosts should leave through the upstream proxy. You still have to give Squid a parent proxy to send them to — the Pi can’t invent one. Three one-time steps:</p>
+    <ol class="help-steps">
+        <li><strong>Have a parent / upstream proxy that is reachable from the Pi.</strong> A VPN-side proxy, a Tor <code>privoxy</code>, a company proxy, another Squid… It must be a real HTTP proxy that accepts <code>CONNECT</code> for HTTPS. PiProxyGuard does <em>not</em> create or host it for you.</li>
+        <li><strong>Wire it into Squid once</strong> (run on the Pi as root):
+            <div class="code-block">sudo piproxyguard-upstream enable &lt;host&gt; &lt;port&gt;   # e.g. 10.8.0.1 8888
+sudo piproxyguard-upstream status                 # check it is active
+sudo piproxyguard-upstream disable                # send every domain direct again</div>
+            <span class="muted">Installed from source instead of the .deb? Use <code>sudo ./deploy/upstream-tunnel/setup-upstream.sh enable &lt;host&gt; &lt;port&gt;</code> from the repo.</span>
+        </li>
+        <li><strong>Add the domains below.</strong> Suffix match — <code>example.com</code> also covers <code>cdn.example.com</code>. Changes apply immediately via <code>squid -k reconfigure</code>; no restart needed.</li>
+    </ol>
+    <div class="callout-warn"><strong>Heads-up:</strong> tunneled domains use <code>never_direct</code> — they have <em>no</em> direct fallback. If the parent proxy is down, those domains stop loading until it is back or you run <code>piproxyguard-upstream disable</code>. Everything else keeps working normally.</div>
+</section>
 
 <section class="panel">
     <div class="panel-head"><h2>Tunnel a domain</h2></div>

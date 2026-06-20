@@ -14,4 +14,11 @@ if [ "$1" = "remove" ] && [ -x /usr/lib/piproxyguard/transparent-setup.sh ]; the
     sh /usr/lib/piproxyguard/transparent-setup.sh disable 2>/dev/null || true
 fi
 
+# Likewise strip the upstream-tunnel cache_peer block from squid.conf on removal,
+# so we don't leave a never_direct peer pointing at a now-irrelevant parent proxy
+# (the tunnel_domains.acl list is kept by 'disable').
+if [ "$1" = "remove" ] && [ -x /usr/lib/piproxyguard/upstream-setup.sh ]; then
+    sh /usr/lib/piproxyguard/upstream-setup.sh disable 2>/dev/null || true
+fi
+
 exit 0

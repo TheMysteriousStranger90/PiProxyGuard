@@ -28,7 +28,23 @@ Two halves:
 2. **The parent proxy wiring** — `cache_peer` + `cache_peer_access` +
    `never_direct`, added to `squid.conf` once by `setup-upstream.sh`.
 
-## Setup (native install on the Pi)
+## Setup (.deb install — recommended)
+
+The package ships the engine at `/usr/lib/piproxyguard/upstream-setup.sh` with a thin
+`piproxyguard-upstream` command in `/usr/bin` (exactly like `piproxyguard-transparent`).
+After `sudo apt install ./piproxyguard_*_arm64.deb`, wire the parent proxy once:
+
+```bash
+sudo piproxyguard-upstream enable <host> <port>   # e.g. 10.8.0.1 8888
+sudo piproxyguard-upstream status
+sudo piproxyguard-upstream disable                # all domains go direct again
+```
+
+It is **not** enabled automatically at install (it needs an external parent proxy and its
+`host:port`). `apt remove` strips the `cache_peer` block from `squid.conf` for you (the
+`tunnel_domains.acl` list is kept).
+
+## Setup (native install from a checkout)
 
 ```bash
 cd deploy/upstream-tunnel
