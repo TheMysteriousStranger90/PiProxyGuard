@@ -70,6 +70,10 @@ public record AddAllowedDomainRequest(string Domain, string? Reason);
 
 public record AllowedDomainDto(long Id, string Domain, string? Reason, DateTime CreatedAtUtc);
 
+public record AddTunneledDomainRequest(string Domain, string? Reason);
+
+public record TunneledDomainDto(long Id, string Domain, string? Reason, DateTime CreatedAtUtc);
+
 // ---------------------------------------------------------------------------
 // Categories, threat-intel, diagnostics, digest, backup (1.2.0)
 // ---------------------------------------------------------------------------

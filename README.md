@@ -241,6 +241,33 @@ See **[`deploy/transparent/README.md`](deploy/transparent/README.md)** for the f
 > friendly 403 page; HTTP blocks still return the normal 403. DoH/DoT and ECH can hide the SNI and
 > bypass SNI-based blocking. The dashboard now shows real per-device IPs instead of just `127.0.0.1`.
 
+### Upstream tunnel (route selected domains through a parent proxy)
+
+The blocklist decides what to *drop*; the **upstream tunnel** decides what to *re-route*. It forwards
+**only the domains you choose** through an upstream/parent proxy (a VPN-side proxy, a Tor
+`privoxy`, a company proxy, another Squid, ...) while every other domain keeps going out directly —
+the runtime-editable mirror of the blocklist/allowlist.
+
+Manage the list from the dashboard's **Upstream tunnel** page (or `GET/POST/DELETE /api/tunnel`);
+PiProxyGuard writes it to `/etc/squid/tunnel_domains.acl` (suffix match — `example.com` also covers
+`cdn.example.com`) and runs `squid -k reconfigure`. Wire the parent proxy into `squid.conf` once:
+
+```bash
+cd deploy/upstream-tunnel
+sudo ./setup-upstream.sh enable <host> <port>     # e.g. 10.8.0.1 8888
+sudo ./setup-upstream.sh status                   # inspect
+sudo ./setup-upstream.sh disable                  # all domains go direct again
+```
+
+This adds a managed `cache_peer` + `cache_peer_access` + `never_direct` block (with a backup and a
+`squid -k parse` safety check). See **[`deploy/upstream-tunnel/README.md`](deploy/upstream-tunnel/README.md)**
+for the full guide.
+
+> **Note:** `never_direct` means the tunneled domains have **no direct fallback** — if the parent
+> proxy is down they stop working until you fix it or run `disable` (other traffic is unaffected).
+> The tunnel routes traffic; point it at a proxy on the secure side (VPN/Tor) if hiding from the ISP
+> is the goal.
+
 ## Troubleshooting & diagnostics
 
 Handy commands once it's running on the Pi:

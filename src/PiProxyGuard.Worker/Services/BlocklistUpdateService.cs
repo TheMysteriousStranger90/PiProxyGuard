@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using PiProxyGuard.Infrastructure.Blocklists;
 using PiProxyGuard.Infrastructure.Squid;
 using PiProxyGuard.Infrastructure.Options;
+using PiProxyGuard.Infrastructure.Tunneling;
 
 namespace PiProxyGuard.Worker.Services;
 
@@ -43,6 +44,22 @@ public class BlocklistUpdateService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not seed initial ACL file");
+        }
+
+        // Seed the upstream-tunnel ACL and bring it in sync with the database so
+        // Squid's cache_peer rules can reference it immediately, even before any
+        // dashboard edit. Harmless when the tunnel feature is not enabled.
+        try
+        {
+            using var tunnelScope = _scopeFactory.CreateScope();
+            var tunnelWriter = tunnelScope.ServiceProvider.GetRequiredService<TunnelAclWriter>();
+            await tunnelWriter.EnsureAclFileExistsAsync(stoppingToken);
+            var tunnelUpdater = tunnelScope.ServiceProvider.GetRequiredService<TunnelAclUpdater>();
+            await tunnelUpdater.UpdateAsync(stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not seed initial upstream-tunnel ACL file");
         }
 
         while (!stoppingToken.IsCancellationRequested)

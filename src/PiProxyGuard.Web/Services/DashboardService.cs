@@ -6,6 +6,7 @@ using PiProxyGuard.Domain.Enums;
 using PiProxyGuard.Domain.Statistics;
 using PiProxyGuard.Infrastructure.Blocklists;
 using PiProxyGuard.Infrastructure.Diagnostics;
+using PiProxyGuard.Infrastructure.Tunneling;
 
 namespace PiProxyGuard.Web.Services;
 
@@ -199,6 +200,57 @@ public sealed class DashboardService
         }
 
         uow.AllowedDomains.Remove(entity);
+        await uow.SaveChangesAsync(ct).ConfigureAwait(false);
+        await updater.UpdateAsync(ct).ConfigureAwait(false);
+        return true;
+    }
+
+    // ---- upstream tunnel --------------------------------------------------
+
+    public async Task<List<TunneledDomainDto>>
+        GetTunneledAsync(string? search, int count, CancellationToken ct = default) =>
+        await WithUnitOfWork(async uow =>
+        {
+            var domains = await uow.TunneledDomains.SearchAsync(search, count, ct).ConfigureAwait(false);
+            return domains.Select(d => new TunneledDomainDto(d.Id, d.Domain, d.Reason, d.CreatedAtUtc)).ToList();
+        }).ConfigureAwait(false);
+
+    public async Task<MutationResult> AddTunneledAsync(string rawDomain, string? reason, CancellationToken ct = default)
+    {
+        var domain = DomainUtils.NormalizeDomain(rawDomain);
+        if (domain is null)
+        {
+            return MutationResult.Fail($"'{rawDomain}' is not a valid domain.");
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var updater = scope.ServiceProvider.GetRequiredService<TunnelAclUpdater>();
+
+        if (await uow.TunneledDomains.FindByDomainAsync(domain, ct).ConfigureAwait(false) is not null)
+        {
+            return MutationResult.Fail($"'{domain}' is already tunneled.");
+        }
+
+        uow.TunneledDomains.Add(new TunneledDomain { Domain = domain, Reason = reason, CreatedAtUtc = DateTime.UtcNow });
+        await uow.SaveChangesAsync(ct).ConfigureAwait(false);
+        await updater.UpdateAsync(ct).ConfigureAwait(false);
+        return MutationResult.Ok();
+    }
+
+    public async Task<bool> RemoveTunneledAsync(long id, CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var updater = scope.ServiceProvider.GetRequiredService<TunnelAclUpdater>();
+
+        var entity = await uow.TunneledDomains.GetByIdAsync(id, ct).ConfigureAwait(false);
+        if (entity is null)
+        {
+            return false;
+        }
+
+        uow.TunneledDomains.Remove(entity);
         await uow.SaveChangesAsync(ct).ConfigureAwait(false);
         await updater.UpdateAsync(ct).ConfigureAwait(false);
         return true;

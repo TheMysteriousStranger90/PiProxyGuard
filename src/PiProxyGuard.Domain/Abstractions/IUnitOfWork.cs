@@ -19,6 +19,9 @@ public interface IUnitOfWork
     /// <summary>The allowlist (exceptions that override the blocklist).</summary>
     IAllowedDomainRepository AllowedDomains { get; }
 
+    /// <summary>The upstream-tunnel list (domains routed via the parent proxy).</summary>
+    ITunneledDomainRepository TunneledDomains { get; }
+
     /// <summary>Suspicious-activity alerts.</summary>
     IAlertRepository Alerts { get; }
 

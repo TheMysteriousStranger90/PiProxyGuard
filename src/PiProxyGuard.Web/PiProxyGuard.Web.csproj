@@ -23,8 +23,4 @@
     <ProjectReference Include="..\PiProxyGuard.Infrastructure\PiProxyGuard.Infrastructure.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="wwwroot\" />
-  </ItemGroup>
-
 </Project>
