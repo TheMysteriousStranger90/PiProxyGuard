@@ -18,7 +18,7 @@ namespace PiProxyGuard.Infrastructure.Notifications;
 public sealed class NotificationSettingsStore : INotificationSettingsStore, IDisposable
 {
     /// <summary>Primary key of the single settings row.</summary>
-    public const int SingletonId = 1;
+    public const long SingletonId = 1;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(8);
 

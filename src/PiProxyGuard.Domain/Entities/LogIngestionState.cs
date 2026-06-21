@@ -6,7 +6,7 @@ namespace PiProxyGuard.Domain.Entities;
 /// </summary>
 public class LogIngestionState
 {
-    public int Id { get; set; }
+    public long Id { get; set; }
 
     public string FilePath { get; set; } = string.Empty;
 
