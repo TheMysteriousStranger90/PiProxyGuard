@@ -13,7 +13,7 @@ namespace PiProxyGuard.Domain.Entities;
 public class NotificationSetting
 {
     /// <summary>Primary key. Always <c>1</c> — this table holds a single row.</summary>
-    public int Id { get; set; }
+    public long Id { get; set; }
 
     /// <summary>Lowest severity that is actually delivered.</summary>
     public NotificationSeverity MinimumSeverity { get; set; } = NotificationSeverity.Warning;
