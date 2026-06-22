@@ -4,10 +4,11 @@
 
 <nav class="sidebar">
     <div class="brand">
-        <img class="brand-logo" src="_content/PiProxyGuard.Web/img/Logo.png" alt="PiProxyGuard logo" width="34" height="34" />
+        <img class="brand-logo" src="_content/PiProxyGuard.Web/img/Logo.png" alt="PiProxyGuard logo" width="34"
+             height="34"/>
         <div>
             <div class="brand-name">PiProxyGuard</div>
-            <div class="brand-sub">v1.9.0</div>
+            <div class="brand-sub">v2.0.0</div>
         </div>
     </div>
 
@@ -31,7 +32,8 @@
             <span class="nav-glyph"></span> Alerts
             @if (_openAlerts > 0)
             {
-                <span class="nav-badge" title="@_openAlerts open alert(s)">@(_openAlerts > 99 ? "99+" : _openAlerts.ToString())</span>
+                <span class="nav-badge"
+                      title="@_openAlerts open alert(s)">@(_openAlerts > 99 ? "99+" : _openAlerts.ToString())</span>
             }
         </NavLink>
         <NavLink class="nav-item" href="diagnostics">
@@ -91,4 +93,5 @@
         Notifier.DataChanged -= OnDataChanged;
         GC.SuppressFinalize(this);
     }
+
 }

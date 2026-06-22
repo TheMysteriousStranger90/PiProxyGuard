@@ -247,9 +247,75 @@ public class ThreatIntelOptions
     /// <summary>Enable the free URLhaus host lookup.</summary>
     public bool UrlhausEnabled { get; set; } = true;
 
-    /// <summary>Optional VirusTotal API key (reserved for a future provider).</summary>
+    /// <summary>Optional VirusTotal API key. When set, the VirusTotal v3 domain lookup is enabled.</summary>
     public string? VirusTotalApiKey { get; set; }
 
-    /// <summary>Optional AbuseIPDB API key (reserved for a future provider).</summary>
+    /// <summary>Optional AbuseIPDB API key. When set, the AbuseIPDB IP lookup is enabled.</summary>
     public string? AbuseIpDbApiKey { get; set; }
+
+    /// <summary>
+    /// AbuseIPDB abuse-confidence score (1-100) at or above which a host counts
+    /// as malicious. Lower it to be stricter; raise it to flag only high-confidence hits.
+    /// </summary>
+    public int AbuseIpDbScoreThreshold { get; set; } = 50;
+}
+
+/// <summary>
+/// Scheduled-report (daily digest) options for the Worker's
+/// <c>ScheduledReportService</c>. The report itself is produced by the existing
+/// <c>DigestReportBuilder</c> and delivered through the configured notification
+/// channels (Telegram / e-mail).
+/// </summary>
+public class ReportOptions
+{
+    public const string SectionName = "Reports";
+
+    /// <summary>Master switch for the scheduled daily digest.</summary>
+    public bool DailyDigestEnabled { get; set; }
+
+    /// <summary>Local-time hour of day (0-23) the digest is sent.</summary>
+    public int DailyReportHour { get; set; } = 8;
+
+    /// <summary>How many hours of traffic the digest covers (default = last 24 h).</summary>
+    public int WindowHours { get; set; } = 24;
+
+    /// <summary>Subject line / title of the digest.</summary>
+    public string Title { get; set; } = "PiProxyGuard daily digest";
+
+    /// <summary>
+    /// Severity the digest is delivered at. Defaults to Warning so it passes the
+    /// default notification severity threshold; set to Info to make it lowest-priority.
+    /// </summary>
+    public NotificationLevel Severity { get; set; } = NotificationLevel.Warning;
+}
+
+/// <summary>
+/// Options for the Worker's background threat-intel scanner, which periodically
+/// runs the busiest recently-seen domains through the configured threat-intel
+/// providers and (optionally) auto-blocks the malicious ones.
+/// </summary>
+public class ThreatIntelScanOptions
+{
+    public const string SectionName = "ThreatIntelScan";
+
+    /// <summary>Master switch for the background scan.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>How often the scan runs.</summary>
+    public int IntervalHours { get; set; } = 6;
+
+    /// <summary>How far back to look for the busiest hosts to scan.</summary>
+    public int LookbackHours { get; set; } = 24;
+
+    /// <summary>Number of top hosts (by request count) scanned each cycle.</summary>
+    public int TopDomains { get; set; } = 50;
+
+    /// <summary>Delay between individual provider lookups, to respect feed rate limits.</summary>
+    public int RequestDelayMs { get; set; } = 1500;
+
+    /// <summary>When true, malicious hosts are added to the blocklist automatically.</summary>
+    public bool AutoBlock { get; set; } = true;
+
+    /// <summary>Lifetime of an auto-block created by the scan. 0 = permanent.</summary>
+    public int AutoBlockTtlHours { get; set; }
 }

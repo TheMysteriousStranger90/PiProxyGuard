@@ -77,3 +77,75 @@ public sealed record NotificationSettingsInput
     public string? EmailFrom { get; init; }
     public string? EmailTo { get; init; }
 }
+
+/// <summary>Traffic grouped by client country for the traffic page (GeoIP).</summary>
+public sealed record CountryTraffic(
+    string Code,
+    string Name,
+    long Requests,
+    long Bytes,
+    long DeniedRequests,
+    int ClientCount);
+
+/// <summary>A top client device enriched with its resolved country (GeoIP).</summary>
+public sealed record ClientTrafficView(
+    string ClientIp,
+    long Requests,
+    long Bytes,
+    long DeniedRequests,
+    string? CountryCode,
+    string? CountryName);
+
+/// <summary>
+/// Security / integration settings as shown on the Settings page. The API keys
+/// are never sent back to the browser — only a "has value" flag and a short
+/// masked preview, exactly like the notification secrets.
+/// </summary>
+public sealed record SecuritySettingsViewModel(
+    string? GeoIpCountryDatabasePath,
+    string? GeoIpAsnDatabasePath,
+    bool GeoIpActive,
+    bool UrlhausEnabled,
+    bool VirusTotalHasKey,
+    string? VirusTotalKeyPreview,
+    bool AbuseIpDbHasKey,
+    string? AbuseIpDbKeyPreview,
+    int AbuseIpDbScoreThreshold,
+    bool DailyDigestEnabled,
+    int DailyReportHour,
+    int DigestWindowHours,
+    bool ScanEnabled,
+    int ScanIntervalHours,
+    int ScanLookbackHours,
+    int ScanTopDomains,
+    int ScanRequestDelayMs,
+    bool ScanAutoBlock,
+    int ScanAutoBlockTtlHours);
+
+/// <summary>
+/// The editable security settings posted from the Settings page. A null or empty
+/// API key (<see cref="VirusTotalApiKey"/> / <see cref="AbuseIpDbApiKey"/>) means
+/// "keep the stored value", so the user never has to re-type it.
+/// </summary>
+public sealed record SecuritySettingsInput
+{
+    public string? GeoIpCountryDatabasePath { get; init; }
+    public string? GeoIpAsnDatabasePath { get; init; }
+
+    public bool UrlhausEnabled { get; init; } = true;
+    public string? VirusTotalApiKey { get; init; }
+    public string? AbuseIpDbApiKey { get; init; }
+    public int AbuseIpDbScoreThreshold { get; init; } = 50;
+
+    public bool DailyDigestEnabled { get; init; }
+    public int DailyReportHour { get; init; } = 8;
+    public int DigestWindowHours { get; init; } = 24;
+
+    public bool ScanEnabled { get; init; }
+    public int ScanIntervalHours { get; init; } = 6;
+    public int ScanLookbackHours { get; init; } = 24;
+    public int ScanTopDomains { get; init; } = 50;
+    public int ScanRequestDelayMs { get; init; } = 1500;
+    public bool ScanAutoBlock { get; init; } = true;
+    public int ScanAutoBlockTtlHours { get; init; }
+}

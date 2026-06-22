@@ -60,6 +60,33 @@
 </div>
 
 <section class="panel">
+    <div class="panel-head"><h2>By country</h2></div>
+    @if (_countries.Count == 0)
+    {
+        <p class="muted pad">No traffic in this window.</p>
+    }
+    else if (_countries.TrueForAll(c => c.Code == "??"))
+    {
+        <p class="muted pad">GeoIP isn't configured — add a MaxMind GeoLite2-Country database in Settings to break traffic down by country.</p>
+    }
+    else
+    {
+        <div class="bars">
+            @foreach (var country in _countries)
+            {
+                <div class="bar-row">
+                    <div class="bar-label">@CountryLabel(country)</div>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width:@Percent(country.Requests, _maxCountry)%"></div>
+                    </div>
+                    <div class="bar-value">@Format.Number(country.Requests)</div>
+                </div>
+            }
+        </div>
+    }
+</section>
+
+<section class="panel">
     <div class="panel-head"><h2>Top destinations</h2></div>
     @if (_hosts.Count == 0)
     {
@@ -88,10 +115,12 @@
 
 @code {
     private List<CategoryTrafficDto> _categories = [];
+    private List<CountryTraffic> _countries = [];
     private IReadOnlyList<HostTraffic> _hosts = [];
     private IReadOnlyList<StatusCodeCount> _statuses = [];
     private long _maxCategory = 1;
     private long _maxStatus = 1;
+    private long _maxCountry = 1;
     private int _hours = 24;
 
     protected override async Task LoadAsync()
@@ -99,11 +128,13 @@
         var to = DateTime.UtcNow;
         var from = to.AddHours(-_hours);
         _categories = await Dashboard.GetCategoriesAsync(from, to, 500);
+        _countries = await Dashboard.GetCountriesAsync(from, to);
         _hosts = await Dashboard.GetTopHostsAsync(from, to, 25);
         _statuses = (await Dashboard.GetStatusCodesAsync(from, to))
             .OrderByDescending(s => s.Count).ToList();
         _maxCategory = _categories.Count > 0 ? _categories.Max(c => c.Requests) : 1;
         _maxStatus = _statuses.Count > 0 ? _statuses.Max(s => s.Count) : 1;
+        _maxCountry = _countries.Count > 0 ? _countries.Max(c => c.Requests) : 1;
     }
 
     private async Task OnRangeChanged(int hours)
@@ -111,6 +142,9 @@
         _hours = hours;
         await ReloadAsync();
     }
+
+    private static string CountryLabel(CountryTraffic c) =>
+        c.Code == "??" ? c.Name : $"{c.Name} ({c.Code})";
 
     private static int Percent(long value, long max) =>
         max <= 0 ? 0 : (int)Math.Max(2, Math.Round(100.0 * value / max));

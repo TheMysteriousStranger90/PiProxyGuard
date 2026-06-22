@@ -232,7 +232,8 @@ public sealed class DashboardService
             return MutationResult.Fail($"'{domain}' is already tunneled.");
         }
 
-        uow.TunneledDomains.Add(new TunneledDomain { Domain = domain, Reason = reason, CreatedAtUtc = DateTime.UtcNow });
+        uow.TunneledDomains.Add(new TunneledDomain
+            { Domain = domain, Reason = reason, CreatedAtUtc = DateTime.UtcNow });
         await uow.SaveChangesAsync(ct).ConfigureAwait(false);
         await updater.UpdateAsync(ct).ConfigureAwait(false);
         return MutationResult.Ok();
@@ -423,6 +424,128 @@ public sealed class DashboardService
         var tail = trimmed.Length <= 4 ? trimmed : trimmed[^4..];
         return $"\u2022\u2022\u2022{tail}";
     }
+
+    // ---- security / integration settings ---------------------------------
+
+    public async Task<SecuritySettingsViewModel> GetSecuritySettingsAsync(CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var store = scope.ServiceProvider.GetRequiredService<ISecuritySettingsStore>();
+        var geoIp = scope.ServiceProvider.GetRequiredService<IGeoIpResolver>();
+        var s = await store.GetAsync(ct).ConfigureAwait(false);
+
+        return new SecuritySettingsViewModel(
+            s.GeoIpCountryDatabasePath,
+            s.GeoIpAsnDatabasePath,
+            geoIp.IsEnabled,
+            s.UrlhausEnabled,
+            s.VirusTotalConfigured,
+            Mask(s.VirusTotalApiKey),
+            s.AbuseIpDbConfigured,
+            Mask(s.AbuseIpDbApiKey),
+            s.AbuseIpDbScoreThreshold,
+            s.DailyDigestEnabled,
+            s.DailyReportHour,
+            s.DigestWindowHours,
+            s.ScanEnabled,
+            s.ScanIntervalHours,
+            s.ScanLookbackHours,
+            s.ScanTopDomains,
+            s.ScanRequestDelayMs,
+            s.ScanAutoBlock,
+            s.ScanAutoBlockTtlHours);
+    }
+
+    public async Task<MutationResult> SaveSecuritySettingsAsync(SecuritySettingsInput input,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        using var scope = _scopeFactory.CreateScope();
+        var store = scope.ServiceProvider.GetRequiredService<ISecuritySettingsStore>();
+        var current = await store.GetAsync(ct).ConfigureAwait(false);
+
+        // A blank API key means "keep the stored one" — the browser never sees it.
+        var virusTotalKey = string.IsNullOrWhiteSpace(input.VirusTotalApiKey)
+            ? current.VirusTotalApiKey
+            : input.VirusTotalApiKey.Trim();
+        var abuseKey = string.IsNullOrWhiteSpace(input.AbuseIpDbApiKey)
+            ? current.AbuseIpDbApiKey
+            : input.AbuseIpDbApiKey.Trim();
+
+        // Preserve DigestTitle/DigestSeverity (config-only) via the record copy.
+        var snapshot = current with
+        {
+            GeoIpCountryDatabasePath = NullIfBlank(input.GeoIpCountryDatabasePath),
+            GeoIpAsnDatabasePath = NullIfBlank(input.GeoIpAsnDatabasePath),
+            UrlhausEnabled = input.UrlhausEnabled,
+            VirusTotalApiKey = virusTotalKey,
+            AbuseIpDbApiKey = abuseKey,
+            AbuseIpDbScoreThreshold = Math.Clamp(input.AbuseIpDbScoreThreshold, 1, 100),
+            DailyDigestEnabled = input.DailyDigestEnabled,
+            DailyReportHour = Math.Clamp(input.DailyReportHour, 0, 23),
+            DigestWindowHours = Math.Clamp(input.DigestWindowHours, 1, 720),
+            ScanEnabled = input.ScanEnabled,
+            ScanIntervalHours = Math.Clamp(input.ScanIntervalHours, 1, 168),
+            ScanLookbackHours = Math.Clamp(input.ScanLookbackHours, 1, 720),
+            ScanTopDomains = Math.Clamp(input.ScanTopDomains, 1, 1000),
+            ScanRequestDelayMs = Math.Clamp(input.ScanRequestDelayMs, 0, 60000),
+            ScanAutoBlock = input.ScanAutoBlock,
+            ScanAutoBlockTtlHours = Math.Max(0, input.ScanAutoBlockTtlHours)
+        };
+
+        await store.SaveAsync(snapshot, ct).ConfigureAwait(false);
+        return MutationResult.Ok();
+    }
+
+    /// <summary>Top client devices for the window, enriched with their GeoIP country.</summary>
+    public async Task<List<ClientTrafficView>> GetTopDevicesAsync(DateTime fromUtc, DateTime toUtc, int count,
+        CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var geoIp = scope.ServiceProvider.GetRequiredService<IGeoIpResolver>();
+
+        var clients = await uow.ProxyLogs.GetTopClientsAsync(fromUtc, toUtc, count, ct).ConfigureAwait(false);
+        return clients
+            .Select(c =>
+            {
+                var geo = geoIp.Resolve(c.ClientIp);
+                return new ClientTrafficView(
+                    c.ClientIp, c.Requests, c.Bytes, c.DeniedRequests, geo.CountryIsoCode, geo.CountryName);
+            })
+            .ToList();
+    }
+
+    /// <summary>Traffic grouped by the GeoIP country of the client IPs in the window.</summary>
+    public async Task<List<CountryTraffic>> GetCountriesAsync(DateTime fromUtc, DateTime toUtc,
+        int sampleClients = 2000, CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var geoIp = scope.ServiceProvider.GetRequiredService<IGeoIpResolver>();
+        sampleClients = Math.Clamp(sampleClients, 1, 5000);
+
+        var clients = await uow.ProxyLogs.GetTopClientsAsync(fromUtc, toUtc, sampleClients, ct).ConfigureAwait(false);
+        return clients
+            .GroupBy(c =>
+            {
+                var geo = geoIp.Resolve(c.ClientIp);
+                return (Code: geo.CountryIsoCode ?? "??", Name: geo.CountryName ?? "Unknown");
+            })
+            .Select(g => new CountryTraffic(
+                g.Key.Code,
+                g.Key.Name,
+                g.Sum(x => x.Requests),
+                g.Sum(x => x.Bytes),
+                g.Sum(x => x.DeniedRequests),
+                g.Select(x => x.ClientIp).Distinct(StringComparer.OrdinalIgnoreCase).Count()))
+            .OrderByDescending(c => c.Requests)
+            .ToList();
+    }
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     // ---- helpers ----------------------------------------------------------
 

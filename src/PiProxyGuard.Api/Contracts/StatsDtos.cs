@@ -15,7 +15,7 @@ public record TrafficSummaryDto(
 
 public record TopHostDto(string Host, long Requests, long Bytes);
 
-public record TopClientDto(string ClientIp, long Requests, long Bytes, long DeniedRequests);
+public record TopClientDto(string ClientIp, long Requests, long Bytes, long DeniedRequests, string? CountryCode);
 
 public record TimelinePointDto(DateTime BucketStartUtc, long Requests, long Bytes);
 
@@ -79,6 +79,15 @@ public record TunneledDomainDto(long Id, string Domain, string? Reason, DateTime
 // ---------------------------------------------------------------------------
 
 public record CategoryTrafficDto(string Category, long Requests, long Bytes);
+
+/// <summary>Traffic grouped by GeoIP country of the client device.</summary>
+public record CountryTrafficDto(
+    string CountryCode,
+    string CountryName,
+    long Requests,
+    long Bytes,
+    long DeniedRequests,
+    int Clients);
 
 public record ThreatVerdictDto(string Domain, bool IsMalicious, string Source, string? Details);
 

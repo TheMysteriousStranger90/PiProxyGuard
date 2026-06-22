@@ -10,6 +10,8 @@ builder.Services.AddPiProxyGuardInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<LogIngestionService>();
 builder.Services.AddHostedService<BlocklistUpdateService>();
 builder.Services.AddHostedService<SuspiciousActivityService>();
+builder.Services.AddHostedService<ScheduledReportService>();
+builder.Services.AddHostedService<ThreatIntelScanService>();
 
 // Lets systemd track the service state properly (Type=notify).
 builder.Services.AddSystemd();

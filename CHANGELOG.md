@@ -1,5 +1,54 @@
 # Changelog
 
+## 2.0.0 — GeoIP, multi-provider threat intel & scheduled automation
+
+### Added
+- **MaxMind GeoLite2 GeoIP resolver.** `MaxMindGeoIpResolver` implements the
+  previously stub-only `IGeoIpResolver` using the `MaxMind.GeoIP2` package. It is
+  always registered and reads its `.mmdb` paths from the runtime settings store,
+  reopening the databases automatically when the paths change — no restart. When
+  no database is configured (or a file is missing) it transparently degrades to a
+  no-op, so the system behaves identically with or without a database. IPs not in
+  the database (e.g. private LAN ranges) resolve to empty.
+- **Country statistics.** `TopClientDto` now carries the resolved `CountryCode`,
+  and a new `GET /api/stats/countries` endpoint groups client traffic by GeoIP
+  country (requests, bytes, denied, distinct clients). The dashboard now surfaces
+  this as a **By country** card on the Traffic page and a **Country** column on the
+  home page's Top devices table.
+- **VirusTotal and AbuseIPDB threat-intel providers.** `VirusTotalThreatIntelClient`
+  (v3 domain report) and `AbuseIpDbThreatIntelClient` (DNS-resolves the host then
+  scores the IP, threshold via `ThreatIntel:AbuseIpDbScoreThreshold`) join the
+  free URLhaus client behind `IThreatIntelClient`. A new `CompositeThreatIntelClient`
+  fans a lookup out across every enabled provider and is what the API and the
+  scanner now consume. Each provider self-disables until its API key is set.
+- **Scheduled daily digest.** `ScheduledReportService` (Worker) builds the existing
+  `DigestReportBuilder` report once a day at `Reports:DailyReportHour` (local) and
+  delivers it through the configured notification channels. Off by default
+  (`Reports:DailyDigestEnabled`).
+- **Background threat-intel scanning.** `ThreatIntelScanService` (Worker) periodically
+  runs the busiest recently-seen hosts through the threat-intel providers, skips
+  already-blocked/allowlisted hosts, respects a per-lookup delay, notifies on
+  findings and (optionally) auto-blocks malicious hosts. Off by default
+  (`ThreatIntelScan:Enabled`).
+- **Runtime-editable security settings.** The GeoIP database paths, the URLhaus
+  toggle, the VirusTotal / AbuseIPDB API keys and score threshold, the daily-digest
+  schedule and all background-scan parameters are now stored in the database and
+  editable live from the dashboard **Settings** page (and via
+  `GET`/`PUT /api/security/settings`), exactly like the notification settings. A
+  `SecuritySettingsStore` (8s cache) and a `SecuritySettingsRefresher` hosted service
+  propagate every change to the API and the Worker within seconds — no `appsettings`
+  edit, no restart. The API keys are write-only (masked on read; leave the field
+  blank to keep the stored value).
+
+### Changed
+- Version bumped to **v2.0.0** (dashboard nav included). The configuration keys in
+  `appsettings.json` (`ThreatIntel:AbuseIpDbScoreThreshold`, `Reports`,
+  `ThreatIntelScan`, and `GeoIp`) now act as the **seed / fallback** — the live
+  values are read from the database and edited from the Settings page or
+  `api/security`. `TopClientDto` gained a `CountryCode` field (additive). New EF
+  migration `AddSecuritySettings`, applied automatically on startup by both the API
+  and the Worker.
+
 ## 1.8.0 — Upstream tunnel for selected domains
 
 ### Added
