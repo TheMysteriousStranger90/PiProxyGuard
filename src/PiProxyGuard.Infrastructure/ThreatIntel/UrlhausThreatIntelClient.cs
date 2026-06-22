@@ -1,8 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using PiProxyGuard.Domain.Abstractions;
-using PiProxyGuard.Infrastructure.Options;
 
 namespace PiProxyGuard.Infrastructure.ThreatIntel;
 
@@ -10,29 +8,31 @@ namespace PiProxyGuard.Infrastructure.ThreatIntel;
 /// Looks a host up against abuse.ch URLhaus — a free, key-less threat feed of
 /// malware-distribution URLs. A host is flagged when URLhaus reports one or
 /// more known-malicious URLs for it. Never throws: errors and timeouts return
-/// a clean verdict so detection never breaks on a feed hiccup.
+/// a clean verdict so detection never breaks on a feed hiccup. Reads its
+/// enabled flag from the runtime <see cref="ISecuritySettingsStore"/> so it can
+/// be toggled from the dashboard without a restart.
 /// </summary>
 public class UrlhausThreatIntelClient : IThreatIntelClient
 {
     private const string Endpoint = "https://urlhaus-api.abuse.ch/v1/host/";
 
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ThreatIntelOptions _options;
+    private readonly ISecuritySettingsStore _settings;
     private readonly ILogger<UrlhausThreatIntelClient> _logger;
 
     public UrlhausThreatIntelClient(
         IHttpClientFactory httpClientFactory,
-        IOptions<ThreatIntelOptions> options,
+        ISecuritySettingsStore settings,
         ILogger<UrlhausThreatIntelClient> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _options = options.Value;
+        _settings = settings;
         _logger = logger;
     }
 
     public string Source => "URLhaus";
 
-    public bool IsEnabled => _options.UrlhausEnabled;
+    public bool IsEnabled => _settings.Current.UrlhausEnabled;
 
     public async Task<ThreatVerdict> CheckDomainAsync(string domain, CancellationToken cancellationToken = default)
     {
@@ -82,8 +82,9 @@ public class UrlhausThreatIntelClient : IThreatIntelClient
             }
 
             var threat = root.TryGetProperty("urls", out var urlsEl) && urlsEl.ValueKind == JsonValueKind.Array
-                && urlsEl.GetArrayLength() > 0
-                && urlsEl[0].TryGetProperty("threat", out var threatEl)
+                                                                     && urlsEl.GetArrayLength() > 0
+                                                                     && urlsEl[0].TryGetProperty("threat",
+                                                                         out var threatEl)
                 ? threatEl.GetString()
                 : "malware";
 

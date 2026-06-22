@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PiProxyGuard.Domain.Abstractions;
 using PiProxyGuard.Domain.Abstractions.Repositories;
@@ -16,6 +17,7 @@ using PiProxyGuard.Infrastructure.Parsing;
 using PiProxyGuard.Infrastructure.Persistence;
 using PiProxyGuard.Infrastructure.Persistence.Repositories;
 using PiProxyGuard.Infrastructure.Reports;
+using PiProxyGuard.Infrastructure.Settings;
 using PiProxyGuard.Infrastructure.Squid;
 using PiProxyGuard.Infrastructure.ThreatIntel;
 using PiProxyGuard.Infrastructure.Tunneling;
@@ -27,8 +29,7 @@ public static class DependencyInjection
     /// <summary>
     /// Registers everything the Worker and the Web API share: the SQLite
     /// DbContext, the log parser, blocklist machinery, the detector, plus the
-    /// notification, enrichment, threat-intel, reporting and diagnostics
-    /// services introduced in 1.2.0.
+    /// notification, enrichment, threat-intel, reporting and diagnostics services
     /// </summary>
     public static IServiceCollection AddPiProxyGuardInfrastructure(
         this IServiceCollection services, IConfiguration configuration)
@@ -41,6 +42,8 @@ public static class DependencyInjection
         services.Configure<NotificationOptions>(configuration.GetSection(NotificationOptions.SectionName));
         services.Configure<GeoIpOptions>(configuration.GetSection(GeoIpOptions.SectionName));
         services.Configure<ThreatIntelOptions>(configuration.GetSection(ThreatIntelOptions.SectionName));
+        services.Configure<ReportOptions>(configuration.GetSection(ReportOptions.SectionName));
+        services.Configure<ThreatIntelScanOptions>(configuration.GetSection(ThreatIntelScanOptions.SectionName));
 
         var connectionString = NormalizeSqliteConnectionString(
             configuration.GetConnectionString("Default") ?? "Data Source=piproxyguard.db");
@@ -82,18 +85,12 @@ public static class DependencyInjection
         {
             client.Timeout = TimeSpan.FromSeconds(40);
             client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
-        }).AddStandardResilienceHandler(options =>
-        {
-            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
-        });
+        }).AddStandardResilienceHandler(options => { options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30); });
         services.AddHttpClient("threatintel", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(40);
             client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
-        }).AddStandardResilienceHandler(options =>
-        {
-            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
-        });
+        }).AddStandardResilienceHandler(options => { options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30); });
 
         services.AddSingleton<IProxyLogParser, SquidAccessLogParser>();
         services.AddScoped<SquidAclWriter>();
@@ -121,9 +118,35 @@ public static class DependencyInjection
         services.AddSingleton<INotificationSender, EmailNotificationSender>();
         services.AddSingleton<INotificationDispatcher, NotificationDispatcher>();
 
-        // Enrichment, threat-intel, categorization, reporting, diagnostics.
-        services.AddSingleton<IGeoIpResolver, NullGeoIpResolver>();
-        services.AddSingleton<IThreatIntelClient, UrlhausThreatIntelClient>();
+        // Security/integration settings (GeoIP, threat-intel providers, the
+        // scheduled digest and the background scan) are likewise stored in the
+        // database and editable from the dashboard, cached by a singleton store
+        // a background refresher keeps fresh across the Worker and API processes.
+        // When no row has been saved the store falls back to the matching
+        // appsettings sections, so config-driven installs keep working.
+        services.AddSingleton<ISecuritySettingsStore, SecuritySettingsStore>();
+        services.AddHostedService<SecuritySettingsRefresher>();
+
+        // Enrichment: the MaxMind GeoLite2-backed resolver reads its database
+        // paths from the security settings store and (re)opens the .mmdb files
+        // when they change, so GeoIP can be turned on from the dashboard without
+        // a restart; with no database configured it returns empty country/ASN data.
+        services.AddSingleton<IGeoIpResolver, MaxMindGeoIpResolver>();
+
+        // Threat intel: every provider self-disables until its key is set; the
+        // composite fans a lookup out across all enabled providers (URLhaus is
+        // free and on by default) and the public IThreatIntelClient resolves to it.
+        services.AddSingleton<UrlhausThreatIntelClient>();
+        services.AddSingleton<VirusTotalThreatIntelClient>();
+        services.AddSingleton<AbuseIpDbThreatIntelClient>();
+        services.AddSingleton<IThreatIntelClient>(sp => new CompositeThreatIntelClient(
+            new IThreatIntelClient[]
+            {
+                sp.GetRequiredService<UrlhausThreatIntelClient>(),
+                sp.GetRequiredService<VirusTotalThreatIntelClient>(),
+                sp.GetRequiredService<AbuseIpDbThreatIntelClient>(),
+            }));
+
         services.AddSingleton<IDomainCategorizer, RuleBasedDomainCategorizer>();
         services.AddScoped<DigestReportBuilder>();
         services.AddScoped<SystemDiagnostics>();

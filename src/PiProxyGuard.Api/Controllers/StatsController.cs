@@ -11,11 +11,13 @@ public class StatsController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDomainCategorizer _categorizer;
+    private readonly IGeoIpResolver _geoIp;
 
-    public StatsController(IUnitOfWork unitOfWork, IDomainCategorizer categorizer)
+    public StatsController(IUnitOfWork unitOfWork, IDomainCategorizer categorizer, IGeoIpResolver geoIp)
     {
         _unitOfWork = unitOfWork;
         _categorizer = categorizer;
+        _geoIp = geoIp;
     }
 
     /// <summary>Overall traffic summary for a period (defaults to the last 24 hours).</summary>
@@ -58,7 +60,42 @@ public class StatsController : ControllerBase
         count = Math.Clamp(count, 1, 200);
 
         var clients = await _unitOfWork.ProxyLogs.GetTopClientsAsync(from, to, count, cancellationToken);
-        return clients.Select(x => new TopClientDto(x.ClientIp, x.Requests, x.Bytes, x.DeniedRequests)).ToList();
+        return clients
+            .Select(x => new TopClientDto(
+                x.ClientIp, x.Requests, x.Bytes, x.DeniedRequests, _geoIp.Resolve(x.ClientIp).CountryIsoCode))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Traffic grouped by the GeoIP country of the client device. Requires a
+    /// MaxMind GeoLite2 database (see GeoIp options); without one every client
+    /// resolves to the "Unknown" bucket. Private LAN addresses are never in the
+    /// database, so this is most useful when clients are public/WAN IPs.
+    /// </summary>
+    [HttpGet("countries")]
+    public async Task<ActionResult<List<CountryTrafficDto>>> GetCountries(
+        [FromQuery] DateTime? fromUtc, [FromQuery] DateTime? toUtc,
+        [FromQuery] int sampleClients = 2000, CancellationToken cancellationToken = default)
+    {
+        var (from, to) = NormalizeRange(fromUtc, toUtc);
+        sampleClients = Math.Clamp(sampleClients, 1, 5000);
+
+        var clients = await _unitOfWork.ProxyLogs.GetTopClientsAsync(from, to, sampleClients, cancellationToken);
+        return clients
+            .GroupBy(c =>
+            {
+                var geo = _geoIp.Resolve(c.ClientIp);
+                return (Code: geo.CountryIsoCode ?? "??", Name: geo.CountryName ?? "Unknown");
+            })
+            .Select(g => new CountryTrafficDto(
+                g.Key.Code,
+                g.Key.Name,
+                g.Sum(x => x.Requests),
+                g.Sum(x => x.Bytes),
+                g.Sum(x => x.DeniedRequests),
+                g.Select(x => x.ClientIp).Distinct(StringComparer.OrdinalIgnoreCase).Count()))
+            .OrderByDescending(c => c.Requests)
+            .ToList();
     }
 
     /// <summary>Requests and bytes per hour (or per day with interval=day).</summary>

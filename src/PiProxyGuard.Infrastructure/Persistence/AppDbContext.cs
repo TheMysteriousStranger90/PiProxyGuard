@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<SuspiciousActivityAlert> Alerts => Set<SuspiciousActivityAlert>();
     public DbSet<LogIngestionState> IngestionStates => Set<LogIngestionState>();
     public DbSet<NotificationSetting> NotificationSettings => Set<NotificationSetting>();
+    public DbSet<SecuritySetting> SecuritySettings => Set<SecuritySetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -76,6 +77,15 @@ public class AppDbContext : DbContext
             builder.Property(e => e.EmailPassword).HasMaxLength(512);
             builder.Property(e => e.EmailFrom).HasMaxLength(320);
             builder.Property(e => e.EmailTo).HasMaxLength(1024);
+        });
+
+        modelBuilder.Entity<SecuritySetting>(builder =>
+        {
+            builder.Property(e => e.GeoIpCountryDatabasePath).HasMaxLength(1024);
+            builder.Property(e => e.GeoIpAsnDatabasePath).HasMaxLength(1024);
+            builder.Property(e => e.VirusTotalApiKey).HasMaxLength(200);
+            builder.Property(e => e.AbuseIpDbApiKey).HasMaxLength(200);
+            builder.Property(e => e.DigestTitle).HasMaxLength(200);
         });
     }
 }

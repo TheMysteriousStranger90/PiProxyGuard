@@ -7,6 +7,7 @@ Home proxy statistics and protection for a Raspberry Pi, built with **.NET 9**.
 ![Image 3](screenshots/20260619_01h59m45s_grim.png)
 ![Image 4](screenshots/20260619_02h01m23s_grim.png)
 ![Image 5](screenshots/20260619_02h16m27s_grim.png)
+![Image 6](screenshots/20260619_03h30m14s_grim.png)
 
 Squid (or any proxy writing the Squid native log format) does the proxying; PiProxyGuard does everything around it:
 
@@ -19,7 +20,7 @@ Squid (or any proxy writing the Squid native log format) does the proxying; PiPr
 ## Architecture
 
 ```
-                       ┌──────────────────────────── Raspberry Pi ───────────────────────────┐
+                       ┌──────────────────────────── Raspberry Pi ────────────────────────────┐
  devices ── :3128 ──►  Squid ──► /var/log/squid/access.log                                    │
                        │             │ tail + parse                                           │
                        │             ▼                                                        │
@@ -42,14 +43,6 @@ Squid (or any proxy writing the Squid native log format) does the proxying; PiPr
 | `PiProxyGuard.Tests` | xUnit tests for parser, tailer, feeds, detector and the stats repository |
 
 Worker and API are separate systemd services sharing one SQLite file (`Cache=Shared`; both apply migrations on startup, so start order does not matter).
-
-### Data access: Repository + Unit of Work
-
-All persistence goes through the **Repository** and **Unit of Work** patterns instead of injecting `AppDbContext` directly:
-
-- `IUnitOfWork` (Domain) owns one `AppDbContext` per scope and exposes aggregate-specific repositories (`ProxyLogs`, `BlockedDomains`, `Alerts`, `IngestionStates`); `SaveChangesAsync` commits all staged changes in one transaction.
-- `IRepository<T>` provides the shared write operations; each repository (e.g. `IProxyLogRepository`) adds its own query methods that run as SQL `GROUP BY` and return small read models from `PiProxyGuard.Domain.Statistics` — controllers, the detector and the worker never touch EF Core or `IQueryable`.
-- Implementations live in `PiProxyGuard.Infrastructure.Persistence.Repositories`; everything is registered as scoped in `AddPiProxyGuardInfrastructure`.
 
 ## API overview
 
@@ -79,10 +72,11 @@ All persistence goes through the **Repository** and **Unit of Work** patterns in
 | `GET /api/backup/export` · `POST /api/backup/import` | Export / restore manual rules + allowlist as JSON |
 | `GET/PUT /api/notifications/settings` | Read / update the Telegram + e-mail notification settings (secrets are write-only — never returned) |
 | `POST /api/notifications/test` `{ "channel": "Telegram" }` | Send a test message through one channel (`Telegram` or `Email`) |
+| `GET/PUT /api/security/settings` | Read / update the GeoIP paths, threat-intel keys & threshold, daily-digest schedule and background-scan settings (API keys are write-only — masked on read, blank keeps the stored value) |
 | `GET /metrics` | Prometheus metrics (no API key required) |
 | `GET /health` · `GET /health/ready` | Liveness / readiness probes |
 
-Swagger UI: `http://<pi>:5080/swagger`. The same notification settings can be edited from the dashboard **Settings** page at `http://<pi>:5080/settings`.
+Swagger UI: `http://<pi>:5080/swagger`. The notification **and** security settings can be edited from the dashboard **Settings** page at `http://<pi>:5080/settings`.
 
 Hardening for `/api` (all optional, off by default — the dashboard stays open on a trusted LAN):
 
@@ -123,6 +117,14 @@ effect within seconds — no `appsettings` edit, no restart — on every install
 as a fallback when nothing has been saved yet. The same settings are available over REST at
 `GET`/`PUT /api/notifications/settings` and `POST /api/notifications/test`; secrets (the bot
 token and the SMTP password) are write-only and never returned.
+
+**Security & integrations.** The GeoIP database paths, the URLhaus toggle, the VirusTotal /
+AbuseIPDB API keys and score threshold, the daily-digest schedule and every background-scan
+parameter are likewise stored in the database and edited from the **Settings** page (or
+`GET`/`PUT /api/security/settings`). The matching `GeoIp` / `ThreatIntel` / `Reports` /
+`ThreatIntelScan` `appsettings` keys seed the first run and act as a fallback; the API keys
+are write-only and never returned. Changes propagate to both the API and the Worker within
+seconds — no restart — so the GeoIP databases, the digest and the scanner pick them up live.
 
 ## Running with Docker
 

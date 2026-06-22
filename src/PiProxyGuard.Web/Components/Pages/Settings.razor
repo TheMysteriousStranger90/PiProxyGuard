@@ -7,7 +7,7 @@
 <div class="page-header">
     <div>
         <h1>Settings</h1>
-        <p class="muted">Notification channels. Alerts are delivered to every enabled channel.</p>
+        <p class="muted">Notification channels, threat-intelligence providers, the daily digest, the background scan and GeoIP databases.</p>
     </div>
 </div>
 
@@ -118,6 +118,121 @@ else
     </section>
 
     <section class="panel">
+        <div class="panel-head">
+            <h2>Threat intelligence</h2>
+        </div>
+        <div class="form-grid pad">
+            <label class="switch">
+                <input type="checkbox" @bind="_urlhausEnabled" />
+                <span>URLhaus (free, no key)</span>
+            </label>
+            <p class="muted small selfcenter">abuse.ch URLhaus host lookup — on by default.</p>
+
+            <label class="field grow">
+                <span class="field-label">VirusTotal API key</span>
+                <div class="input-eye">
+                    <input class="input" type="@(_showVirusTotalKey ? "text" : "password")" autocomplete="new-password"
+                           placeholder="@VirusTotalKeyPlaceholder" @bind="_virusTotalApiKey" />
+                    <button type="button" class="eye-btn" tabindex="-1"
+                            title="@(_showVirusTotalKey ? "Hide" : "Show")" aria-label="@(_showVirusTotalKey ? "Hide value" : "Show value")"
+                            @onclick="@(() => _showVirusTotalKey = !_showVirusTotalKey)">@(_showVirusTotalKey ? EyeOffIcon : EyeIcon)</button>
+                </div>
+            </label>
+            <label class="field grow">
+                <span class="field-label">AbuseIPDB API key</span>
+                <div class="input-eye">
+                    <input class="input" type="@(_showAbuseKey ? "text" : "password")" autocomplete="new-password"
+                           placeholder="@AbuseIpDbKeyPlaceholder" @bind="_abuseIpDbApiKey" />
+                    <button type="button" class="eye-btn" tabindex="-1"
+                            title="@(_showAbuseKey ? "Hide" : "Show")" aria-label="@(_showAbuseKey ? "Hide value" : "Show value")"
+                            @onclick="@(() => _showAbuseKey = !_showAbuseKey)">@(_showAbuseKey ? EyeOffIcon : EyeIcon)</button>
+                </div>
+            </label>
+            <label class="field">
+                <span class="field-label">AbuseIPDB score threshold (1-100)</span>
+                <input class="input" type="number" min="1" max="100" @bind="_abuseThreshold" />
+            </label>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-head">
+            <h2>Daily digest</h2>
+            <label class="switch">
+                <input type="checkbox" @bind="_digestEnabled" />
+                <span>Enabled</span>
+            </label>
+        </div>
+        <div class="form-grid pad">
+            <label class="field">
+                <span class="field-label">Send at (local hour, 0-23)</span>
+                <input class="input" type="number" min="0" max="23" @bind="_digestHour" />
+            </label>
+            <label class="field">
+                <span class="field-label">Window (hours)</span>
+                <input class="input" type="number" min="1" max="720" @bind="_digestWindow" />
+            </label>
+            <p class="muted small selfcenter">A traffic-and-security summary delivered through the enabled notification channels.</p>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-head">
+            <h2>Background scan</h2>
+            <label class="switch">
+                <input type="checkbox" @bind="_scanEnabled" />
+                <span>Enabled</span>
+            </label>
+        </div>
+        <div class="form-grid pad">
+            <label class="field">
+                <span class="field-label">Interval (hours)</span>
+                <input class="input" type="number" min="1" max="168" @bind="_scanInterval" />
+            </label>
+            <label class="field">
+                <span class="field-label">Lookback (hours)</span>
+                <input class="input" type="number" min="1" max="720" @bind="_scanLookback" />
+            </label>
+            <label class="field">
+                <span class="field-label">Top hosts per cycle</span>
+                <input class="input" type="number" min="1" max="1000" @bind="_scanTop" />
+            </label>
+            <label class="field">
+                <span class="field-label">Delay between lookups (ms)</span>
+                <input class="input" type="number" min="0" max="60000" @bind="_scanDelay" />
+            </label>
+            <label class="switch">
+                <input type="checkbox" @bind="_scanAutoBlock" />
+                <span>Auto-block malicious hosts</span>
+            </label>
+            <label class="field">
+                <span class="field-label">Auto-block TTL (hours, 0 = permanent)</span>
+                <input class="input" type="number" min="0" @bind="_scanTtl" />
+            </label>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-head">
+            <h2>GeoIP databases</h2>
+            <span class="muted small">@(_security?.GeoIpActive == true ? "Loaded" : "Not loaded")</span>
+        </div>
+        <div class="form-grid pad">
+            <label class="field grow">
+                <span class="field-label">GeoLite2-Country .mmdb path</span>
+                <input class="input" type="text" autocomplete="off"
+                       placeholder="/var/lib/piproxyguard/GeoLite2-Country.mmdb" @bind="_geoCountryPath" />
+            </label>
+            <label class="field grow">
+                <span class="field-label">GeoLite2-ASN .mmdb path</span>
+                <input class="input" type="text" autocomplete="off"
+                       placeholder="/var/lib/piproxyguard/GeoLite2-ASN.mmdb" @bind="_geoAsnPath" />
+            </label>
+            <p class="muted small selfcenter">Offline MaxMind GeoLite2 files on the Pi. Changes are applied without a restart.</p>
+        </div>
+    </section>
+
+    <section class="panel">
         <div class="form-row pad">
             <button type="button" class="btn primary" @onclick="SaveAsync" disabled="@_busy">Save settings</button>
             @if (_error is not null)
@@ -155,6 +270,30 @@ else
     private string _emailFrom = string.Empty;
     private string _emailTo = string.Empty;
 
+    private SecuritySettingsViewModel? _security;
+
+    private string _geoCountryPath = string.Empty;
+    private string _geoAsnPath = string.Empty;
+
+    private bool _urlhausEnabled = true;
+    private string _virusTotalApiKey = string.Empty;
+    private string _abuseIpDbApiKey = string.Empty;
+    private int _abuseThreshold = 50;
+    private bool _showVirusTotalKey;
+    private bool _showAbuseKey;
+
+    private bool _digestEnabled;
+    private int _digestHour = 8;
+    private int _digestWindow = 24;
+
+    private bool _scanEnabled;
+    private int _scanInterval = 6;
+    private int _scanLookback = 24;
+    private int _scanTop = 50;
+    private int _scanDelay = 1500;
+    private bool _scanAutoBlock = true;
+    private int _scanTtl;
+
     private bool _showTelegramToken;
     private bool _showTelegramChatId;
     private bool _showEmailPassword;
@@ -171,6 +310,16 @@ else
     private string EmailPasswordPlaceholder =>
         _model?.EmailHasPassword == true
             ? "•••••• (saved — leave blank to keep)"
+            : "optional";
+
+    private string VirusTotalKeyPlaceholder =>
+        _security?.VirusTotalHasKey == true
+            ? $"{_security.VirusTotalKeyPreview} (saved — leave blank to keep)"
+            : "optional";
+
+    private string AbuseIpDbKeyPlaceholder =>
+        _security?.AbuseIpDbHasKey == true
+            ? $"{_security.AbuseIpDbKeyPreview} (saved — leave blank to keep)"
             : "optional";
 
     protected override Task OnInitializedAsync() => LoadAsync();
@@ -194,6 +343,29 @@ else
         _emailPassword = string.Empty;
         _emailFrom = model.EmailFrom ?? string.Empty;
         _emailTo = model.EmailTo ?? string.Empty;
+
+        var security = await Dashboard.GetSecuritySettingsAsync();
+        _security = security;
+
+        _geoCountryPath = security.GeoIpCountryDatabasePath ?? string.Empty;
+        _geoAsnPath = security.GeoIpAsnDatabasePath ?? string.Empty;
+
+        _urlhausEnabled = security.UrlhausEnabled;
+        _virusTotalApiKey = string.Empty;
+        _abuseIpDbApiKey = string.Empty;
+        _abuseThreshold = security.AbuseIpDbScoreThreshold;
+
+        _digestEnabled = security.DailyDigestEnabled;
+        _digestHour = security.DailyReportHour;
+        _digestWindow = security.DigestWindowHours;
+
+        _scanEnabled = security.ScanEnabled;
+        _scanInterval = security.ScanIntervalHours;
+        _scanLookback = security.ScanLookbackHours;
+        _scanTop = security.ScanTopDomains;
+        _scanDelay = security.ScanRequestDelayMs;
+        _scanAutoBlock = security.ScanAutoBlock;
+        _scanTtl = security.ScanAutoBlockTtlHours;
     }
 
     private NotificationSettingsInput BuildInput() => new()
@@ -212,6 +384,26 @@ else
         EmailTo = NullIfEmpty(_emailTo)
     };
 
+    private SecuritySettingsInput BuildSecurityInput() => new()
+    {
+        GeoIpCountryDatabasePath = NullIfEmpty(_geoCountryPath),
+        GeoIpAsnDatabasePath = NullIfEmpty(_geoAsnPath),
+        UrlhausEnabled = _urlhausEnabled,
+        VirusTotalApiKey = NullIfEmpty(_virusTotalApiKey),
+        AbuseIpDbApiKey = NullIfEmpty(_abuseIpDbApiKey),
+        AbuseIpDbScoreThreshold = _abuseThreshold,
+        DailyDigestEnabled = _digestEnabled,
+        DailyReportHour = _digestHour,
+        DigestWindowHours = _digestWindow,
+        ScanEnabled = _scanEnabled,
+        ScanIntervalHours = _scanInterval,
+        ScanLookbackHours = _scanLookback,
+        ScanTopDomains = _scanTop,
+        ScanRequestDelayMs = _scanDelay,
+        ScanAutoBlock = _scanAutoBlock,
+        ScanAutoBlockTtlHours = _scanTtl
+    };
+
     private async Task SaveAsync()
     {
         _error = _info = null;
@@ -222,6 +414,13 @@ else
             if (!result.Success)
             {
                 _error = result.Error;
+                return;
+            }
+
+            var securityResult = await Dashboard.SaveSecuritySettingsAsync(BuildSecurityInput());
+            if (!securityResult.Success)
+            {
+                _error = securityResult.Error;
                 return;
             }
 
